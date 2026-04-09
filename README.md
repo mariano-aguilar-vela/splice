@@ -70,13 +70,13 @@ Long analyses can be interrupted and resumed:
 
 ### From PyPI (future)
 ```bash
-pip install splicekit
+pip install splice
 ```
 
 ### From Source
 ```bash
-git clone https://github.com/your-repo/splicekit.git
-cd splicekit
+git clone https://github.com/mariano-aguilar-vela/splice.git
+cd splice
 pip install -e .
 ```
 
@@ -96,7 +96,8 @@ All dependencies are automatically installed. Key packages:
 ### Basic Differential Splicing Analysis
 ```bash
 splice run \
-  --bam sample1.bam sample2.bam sample3.bam sample4.bam sample5.bam sample6.bam \
+  -b sample1.bam -b sample2.bam -b sample3.bam \
+  -b sample4.bam -b sample5.bam -b sample6.bam \
   --sample-names S1 S2 S3 S4 S5 S6 \
   --gtf genes.gtf \
   --genome hg38.fa \
@@ -176,7 +177,7 @@ The main entry point. Runs all 18 pipeline stages end-to-end.
 ### Required Options
 
 **Input Files:**
-- `--bam, -b` *(multiple)* — Input BAM file(s). Must be coordinate-sorted and indexed. Can specify multiple times: `--bam a.bam --bam b.bam`
+- `--bam, -b` *(multiple)* — Input BAM file(s). Must be coordinate-sorted and indexed. Specify once per file: `-b a.bam -b b.bam`
 - `--gtf, -g` — Genome annotation GTF file. Used for initial splicing graph construction.
 - `--group1` — Comma-separated sample indices for group 1 (0-indexed). Example: `--group1 0,1,2`
 - `--group2` — Comma-separated sample indices for group 2 (0-indexed). Example: `--group2 3,4,5`
@@ -269,8 +270,8 @@ The main entry point. Runs all 18 pipeline stages end-to-end.
 ### Example: Complete Analysis with Covariates
 ```bash
 splice run \
-  --bam control_1.bam control_2.bam control_3.bam \
-       case_1.bam case_2.bam case_3.bam \
+  -b control_1.bam -b control_2.bam -b control_3.bam \
+  -b case_1.bam -b case_2.bam -b case_3.bam \
   --sample-names C1 C2 C3 E1 E2 E3 \
   --gtf genes.gtf \
   --genome hg38.fa \
@@ -541,7 +542,7 @@ If you use SPLICE in published research, please cite:
 
 ```
 SPLICE: A comprehensive platform for annotation-free differential splicing analysis.
-Version 1.0.0. GitHub: https://github.com/your-repo/splicekit
+Version 1.0.0. GitHub: https://github.com/mariano-aguilar-vela/splice
 ```
 
 ---
