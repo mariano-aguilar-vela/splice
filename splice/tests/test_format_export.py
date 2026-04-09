@@ -11,9 +11,9 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.diff import DiffResult
-from splicekit.core.psi import ModulePSI
-from splicekit.io.format_export import (
+from splice.core.diff import DiffResult
+from splice.core.psi import ModulePSI
+from splice.io.format_export import (
     export_bed_format,
     export_event_gtf,
     export_leafcutter_format,

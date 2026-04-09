@@ -85,7 +85,7 @@ def save_junction_evidence(evidence: Dict[str, dict], path: str) -> None:
     )
 
     for junction_id, ev in evidence.items():
-        from splicekit.utils.genomic import Junction
+        from splice.utils.genomic import Junction
 
         junction: Junction = ev.get("junction")
         sample_counts: List[int] = ev.get("sample_counts", [])
@@ -153,7 +153,7 @@ def load_junction_evidence(path: str) -> Dict[str, dict]:
     Raises:
         FileNotFoundError: If evidence file does not exist.
     """
-    from splicekit.utils.genomic import Junction
+    from splice.utils.genomic import Junction
 
     # Try Parquet first
     parquet_path = path if path.endswith(".parquet") else f"{path}.parquet"

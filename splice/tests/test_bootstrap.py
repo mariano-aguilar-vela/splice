@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.bootstrap import (
+from splice.core.bootstrap import (
     bootstrap_confidence_intervals,
     bootstrap_junction_counts,
     bootstrap_mean_psi,

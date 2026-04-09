@@ -1,4 +1,4 @@
-# SpliceKit dependencies
+# SPLICE dependencies
 # Install with: pip install -r requirements.txt
 # Or: pip install -e .
 
@@ -17,7 +17,7 @@ pyfastx>=2.0.0
 statsmodels>=0.14.0
 
 # CLI interface
-click>=8.1.0
+click>=7.0.0
 
 # Progress reporting
 tqdm>=4.65.0

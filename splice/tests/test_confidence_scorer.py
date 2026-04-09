@@ -12,13 +12,13 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from splicekit.core.confidence_scorer import (
+from splice.core.confidence_scorer import (
     JunctionConfidence,
     filter_junctions_by_confidence,
     score_all_junctions,
     score_junction,
 )
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
 
 
 class TestJunctionConfidence(unittest.TestCase):

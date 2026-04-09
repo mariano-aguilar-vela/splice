@@ -8,14 +8,14 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.effective_length import (
+from splice.core.effective_length import (
     compute_effective_lengths_for_module,
     compute_exon_body_effective_lengths,
     compute_library_size_factors,
     compute_se_effective_lengths,
     length_normalize_counts,
 )
-from splicekit.utils.genomic import GenomicInterval, Junction
+from splice.utils.genomic import GenomicInterval, Junction
 
 
 class TestComputeSEEffectiveLengths(unittest.TestCase):
@@ -213,14 +213,14 @@ class TestLengthNormalizeCounts(unittest.TestCase):
 
         normalized = length_normalize_counts(counts, effective_lengths)
 
-        self.assertEqual(normalized[0], 1.0)
-        self.assertEqual(normalized[1], 0.0)  # Undefined, set to 0
-        self.assertEqual(normalized[2], 3.0)
+        np.testing.assert_almost_equal(normalized[0], 1.0)
+        np.testing.assert_almost_equal(normalized[1], 0.0)  # Undefined, set to 0
+        np.testing.assert_almost_equal(normalized[2], 3.0)
 
     def test_matrix_normalization(self):
         """Test normalization of 2D count matrix."""
         counts = np.array([[100, 200], [300, 400]])
-        effective_lengths = np.array([[100, 100], [100, 100]])
+        effective_lengths = np.array([100, 100])
 
         normalized = length_normalize_counts(counts, effective_lengths)
 

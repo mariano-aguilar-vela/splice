@@ -8,8 +8,8 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.diff_het import HetResult, test_heterogeneous_splicing
-from splicekit.core.psi import ModulePSI
+from splice.core.diff_het import HetResult, heterogeneous_splicing
+from splice.core.psi import ModulePSI
 
 
 class TestHetResultDataclass(unittest.TestCase):
@@ -101,7 +101,7 @@ class TestHeterogeneousTestingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing([psi], group_labels)
+        results = heterogeneous_splicing([psi], group_labels)
 
         self.assertEqual(len(results), 1)
         result = results[0]
@@ -119,7 +119,7 @@ class TestHeterogeneousTestingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing([psi], group_labels)
+        results = heterogeneous_splicing([psi], group_labels)
 
         result = results[0]
 
@@ -132,7 +132,7 @@ class TestHeterogeneousTestingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing([psi], group_labels)
+        results = heterogeneous_splicing([psi], group_labels)
 
         result = results[0]
 
@@ -151,7 +151,7 @@ class TestHeterogeneousTestingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing([psi], group_labels)
+        results = heterogeneous_splicing([psi], group_labels)
 
         result = results[0]
 
@@ -165,7 +165,7 @@ class TestHeterogeneousTestingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing([psi], group_labels)
+        results = heterogeneous_splicing([psi], group_labels)
 
         result = results[0]
 
@@ -208,7 +208,7 @@ class TestHeterogeneousTestingMultiple(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing(psi_list, group_labels)
+        results = heterogeneous_splicing(psi_list, group_labels)
 
         # Should process all modules
         self.assertEqual(len(results), 5)
@@ -237,7 +237,7 @@ class TestHeterogeneousTestingEdgeCases(unittest.TestCase):
         # Only 1 sample in group 1 - should fail min_samples check
         group_labels = np.array([0, 0, 0, 0, 1])
 
-        results = test_heterogeneous_splicing(
+        results = heterogeneous_splicing(
             [psi], group_labels, min_samples_per_group=3
         )
 
@@ -258,7 +258,7 @@ class TestHeterogeneousTestingEdgeCases(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing([psi], group_labels)
+        results = heterogeneous_splicing([psi], group_labels)
 
         result = results[0]
 
@@ -291,7 +291,7 @@ class TestHeterogeneousTestingEdgeCases(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing([psi], group_labels)
+        results = heterogeneous_splicing([psi], group_labels)
 
         result = results[0]
 
@@ -329,7 +329,7 @@ class TestHeterogeneousFDRCorrection(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
 
-        results = test_heterogeneous_splicing(psi_list, group_labels)
+        results = heterogeneous_splicing(psi_list, group_labels)
 
         # All FDR values should be in [0, 1]
         for result in results:

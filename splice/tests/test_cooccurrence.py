@@ -8,15 +8,15 @@ identify_coordinated_junctions, and compute_cooccurrence_similarity.
 import numpy as np
 import pytest
 
-from splicekit.core.cooccurrence import (
+from splice.core.cooccurrence import (
     CooccurrenceGraph,
     build_cooccurrence_graph,
     compute_cooccurrence_similarity,
     identify_coordinated_junctions,
     identify_mutually_exclusive_paths,
 )
-from splicekit.core.junction_extractor import CooccurrenceEvidence
-from splicekit.utils.genomic import Junction, JunctionPair
+from splice.core.junction_extractor import CooccurrenceEvidence
+from splice.utils.genomic import Junction, JunctionPair
 
 
 # ---------------------------------------------------------------------------

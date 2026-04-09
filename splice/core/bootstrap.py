@@ -12,7 +12,7 @@ from typing import Tuple
 
 import numpy as np
 
-from splicekit.core.effective_length import length_normalize_counts
+from splice.core.effective_length import length_normalize_counts
 
 
 def bootstrap_junction_counts(
@@ -39,21 +39,14 @@ def bootstrap_junction_counts(
     bootstrap_counts = np.zeros((n_bootstraps, n_junctions, n_samples), dtype=int)
 
     for sample_idx in range(n_samples):
-        # Get counts for this sample
         sample_counts = count_matrix[:, sample_idx]
-        total_count = np.sum(sample_counts)
-
-        # Compute probabilities
+        total_count = int(np.sum(sample_counts))
         if total_count > 0:
             probs = sample_counts / total_count
-        else:
-            probs = np.ones(n_junctions) / n_junctions
-
-        # Generate bootstrap resamples for this sample
-        for boot_idx in range(n_bootstraps):
-            bootstrap_counts[boot_idx, :, sample_idx] = rng.multinomial(
-                total_count, probs
-            )
+            for boot_idx in range(n_bootstraps):
+                bootstrap_counts[boot_idx, :, sample_idx] = rng.multinomial(
+                    total_count, probs
+                )
 
     return bootstrap_counts
 
@@ -63,9 +56,7 @@ def bootstrap_psi(
     effective_lengths: np.ndarray,
     prior_alpha: float = 0.5,
 ) -> np.ndarray:
-    """Compute PSI for each bootstrap replicate.
-
-    Length-normalizes counts before computing PSI.
+    """Compute PSI for each bootstrap replicate. Fully vectorized.
 
     Args:
         bootstrap_counts: Array of shape (n_bootstraps, n_junctions, n_samples).
@@ -75,27 +66,16 @@ def bootstrap_psi(
     Returns:
         Array of shape (n_bootstraps, n_junctions, n_samples) with PSI values in [0, 1].
     """
-    n_bootstraps, n_junctions, n_samples = bootstrap_counts.shape
+    # Length-normalize: divide each junction by its effective length
+    # effective_lengths shape: (n_junctions,) -> broadcast to (1, n_junctions, 1)
+    eff_len = effective_lengths.reshape(1, -1, 1)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        normalized = np.where(eff_len > 0, bootstrap_counts.astype(float) / eff_len, 0.0)
 
-    psi_matrix = np.zeros((n_bootstraps, n_junctions, n_samples), dtype=float)
-
-    for boot_idx in range(n_bootstraps):
-        # Get this bootstrap replicate
-        counts = bootstrap_counts[boot_idx, :, :].astype(float)
-
-        # Length-normalize: divide each row by its effective length
-        normalized = counts / effective_lengths[:, np.newaxis]
-
-        # Compute PSI: normalized_junc / sum_of_normalized_per_sample
-        # Sum over junctions (rows) to get per-sample totals
-        col_sums = np.sum(normalized, axis=0)
-
-        # Compute PSI for each sample with nonzero reads
-        for sample_idx in range(n_samples):
-            if col_sums[sample_idx] > 0:
-                psi_matrix[boot_idx, :, sample_idx] = (
-                    normalized[:, sample_idx] / col_sums[sample_idx]
-                )
+    # PSI = normalized / sum(normalized) per sample per bootstrap
+    col_sums = np.sum(normalized, axis=1, keepdims=True)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        psi_matrix = np.where(col_sums > 0, normalized / col_sums, 0.0)
 
     return psi_matrix
 
@@ -104,7 +84,7 @@ def bootstrap_confidence_intervals(
     bootstrap_psi: np.ndarray,
     alpha: float = 0.05,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Compute percentile confidence intervals from bootstrap PSI.
+    """Compute percentile confidence intervals from bootstrap PSI. Fully vectorized.
 
     Args:
         bootstrap_psi: Array of shape (n_bootstraps, n_junctions, n_samples).
@@ -113,20 +93,10 @@ def bootstrap_confidence_intervals(
     Returns:
         Tuple of (ci_low, ci_high) each of shape (n_junctions, n_samples).
     """
-    n_bootstraps, n_junctions, n_samples = bootstrap_psi.shape
-
-    ci_low = np.zeros((n_junctions, n_samples), dtype=float)
-    ci_high = np.zeros((n_junctions, n_samples), dtype=float)
-
-    # Percentiles for confidence intervals
-    lower_percentile = (alpha / 2) * 100
-    upper_percentile = (1 - alpha / 2) * 100
-
-    for j in range(n_junctions):
-        for s in range(n_samples):
-            ci_low[j, s] = np.percentile(bootstrap_psi[:, j, s], lower_percentile)
-            ci_high[j, s] = np.percentile(bootstrap_psi[:, j, s], upper_percentile)
-
+    lower_pct = (alpha / 2) * 100
+    upper_pct = (1 - alpha / 2) * 100
+    ci_low = np.percentile(bootstrap_psi, lower_pct, axis=0)
+    ci_high = np.percentile(bootstrap_psi, upper_pct, axis=0)
     return ci_low, ci_high
 
 

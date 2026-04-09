@@ -9,15 +9,15 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from splicekit.core.evidence import (
+from splice.core.evidence import (
     ModuleEvidence,
     build_evidence_matrices,
     filter_evidence_by_depth,
     filter_evidence_by_size,
     get_module_psi_matrix,
 )
-from splicekit.core.splicegraph import SplicingModule
-from splicekit.utils.genomic import Junction
+from splice.core.splicegraph import SplicingModule
+from splice.utils.genomic import Junction
 
 
 class TestModuleEvidence(unittest.TestCase):

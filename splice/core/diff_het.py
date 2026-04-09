@@ -13,8 +13,8 @@ from typing import List
 import numpy as np
 from scipy.stats import ttest_ind, mannwhitneyu
 
-from splicekit.core.psi import ModulePSI
-from splicekit.utils.stats import benjamini_hochberg
+from splice.core.psi import ModulePSI
+from splice.utils.stats import benjamini_hochberg
 
 
 def _hartigan_dip(data: np.ndarray, n_bins: int = 200) -> float:
@@ -120,7 +120,7 @@ class HetResult:
     fdr: float
 
 
-def test_heterogeneous_splicing(
+def heterogeneous_splicing(
     module_psi_list: List[ModulePSI],
     group_labels: np.ndarray,
     min_samples_per_group: int = 3,

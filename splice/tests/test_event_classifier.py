@@ -12,14 +12,14 @@ Tests event classification including:
 
 import unittest
 
-from splicekit.core.event_classifier import (
+from splice.core.event_classifier import (
     classify_all_events,
     classify_event,
     filter_modules_by_event_type,
     get_event_type_counts,
 )
-from splicekit.core.splicegraph import SplicingModule
-from splicekit.utils.genomic import Junction
+from splice.core.splicegraph import SplicingModule
+from splice.utils.genomic import Junction
 
 
 class TestA3SS(unittest.TestCase):
@@ -101,9 +101,12 @@ class TestSE(unittest.TestCase):
         event_type = classify_event(module)
         self.assertEqual(event_type, "SE")
 
-    def test_se_detection_shared_acceptor(self):
-        """Test detection of SE with two junctions sharing acceptor."""
-        # SE: j1 and j2 share acceptor 3000
+    def test_se_detection_shared_acceptor_is_complex(self):
+        """Test that shared-acceptor without SE topology is Complex.
+
+        Three junctions sharing an acceptor but without proper cassette exon
+        topology should be classified as Complex, not SE.
+        """
         j1 = Junction(chrom="chr1", start=1000, end=3000, strand="+")
         j2 = Junction(chrom="chr1", start=1500, end=3000, strand="+")
         j3 = Junction(chrom="chr1", start=1000, end=2000, strand="+")
@@ -117,6 +120,32 @@ class TestSE(unittest.TestCase):
             start=1000,
             end=3000,
             junctions=[j1, j2, j3],
+            junction_indices=[0, 1, 2],
+            n_connections=3,
+        )
+
+        event_type = classify_event(module)
+        self.assertEqual(event_type, "Complex")
+
+    def test_se_proper_topology(self):
+        """Test SE detection with proper cassette exon topology.
+
+        Skip junction (1000-3000) spans from inc_a.start to inc_b.end.
+        Inclusion junctions (1000-2000, 2100-3000) flank a cassette exon.
+        """
+        j_skip = Junction(chrom="chr1", start=1000, end=3000, strand="+")
+        j_inc1 = Junction(chrom="chr1", start=1000, end=2000, strand="+")
+        j_inc2 = Junction(chrom="chr1", start=2100, end=3000, strand="+")
+
+        module = SplicingModule(
+            module_id="mod1",
+            gene_id="GENE1",
+            gene_name="Gene1",
+            chrom="chr1",
+            strand="+",
+            start=1000,
+            end=3000,
+            junctions=[j_skip, j_inc1, j_inc2],
             junction_indices=[0, 1, 2],
             n_connections=3,
         )

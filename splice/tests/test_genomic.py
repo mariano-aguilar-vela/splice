@@ -6,7 +6,7 @@ merge_intervals, subtract_interval.
 """
 
 import pytest
-from splicekit.utils.genomic import (
+from splice.utils.genomic import (
     GenomicInterval,
     Junction,
     JunctionPair,

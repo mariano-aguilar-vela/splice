@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "splice"
 version = "1.0.0"
-description = "SPLICE (Simple Platform for Locating Isoform Complexity Events): The definitive differential splicing analysis tool"
+description = "SPLICE: Splicegraph Probabilistic Learning for Isoform Change Estimation"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -39,7 +39,7 @@ dependencies = [
     "scipy>=1.11.0",
     "pandas>=2.0.0",
     "statsmodels>=0.14.0",
-    "click>=8.1.0",
+    "click>=7.0.0",
     "tqdm>=4.65.0",
     "pyarrow>=14.0.0",
     "pyfastx>=2.0.0",
@@ -72,8 +72,8 @@ docs = [
 [project.scripts]
 splice = "splice.cli:main"
 
-[tool.setuptools]
-packages = ["splice"]
+[tool.setuptools.packages.find]
+include = ["splice*"]
 
 [tool.black]
 line-length = 100

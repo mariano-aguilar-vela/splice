@@ -128,6 +128,8 @@ def fit_dm_glm(
     max_iter: int = 500,
     tol: float = 1e-6,
     method: str = "L-BFGS-B",
+    init_alpha: Optional[np.ndarray] = None,
+    init_concentration: Optional[np.ndarray] = None,
 ) -> DMGLMResult:
     """Fit a DM-GLM with design matrix and covariates.
 
@@ -139,6 +141,8 @@ def fit_dm_glm(
         max_iter: Maximum iterations for optimization.
         tol: Convergence tolerance.
         method: Optimization method (default "L-BFGS-B").
+        init_alpha: Optional initial alpha matrix for warm-starting (null-refit).
+        init_concentration: Optional initial concentration for warm-starting.
 
     Returns:
         DMGLMResult with fitted parameters and diagnostics.
@@ -150,17 +154,25 @@ def fit_dm_glm(
         n_samples == n_samples_design
     ), "count_matrix and design_matrix must have same number of samples"
 
-    # Method-of-moments initialization
-    proportions_per_sample = count_matrix / np.sum(count_matrix, axis=1, keepdims=True)
-    mean_proportions = np.mean(proportions_per_sample, axis=0)
-    var_proportions = np.var(proportions_per_sample, axis=0)
-    expected_var = mean_proportions * (1 - mean_proportions)
+    if init_alpha is not None and init_concentration is not None:
+        # Warm-start from provided parameters (null-refit strategy)
+        mean_alpha = np.mean(init_alpha, axis=0)
+        mean_proportions = mean_alpha / np.sum(mean_alpha)
+        mean_proportions = np.maximum(mean_proportions, 1e-10)
+        concentration_init = float(np.mean(init_concentration))
+        concentration_init = max(0.1, concentration_init)
+    else:
+        # Method-of-moments initialization
+        proportions_per_sample = count_matrix / np.sum(count_matrix, axis=1, keepdims=True)
+        mean_proportions = np.mean(proportions_per_sample, axis=0)
+        var_proportions = np.var(proportions_per_sample, axis=0)
+        expected_var = mean_proportions * (1 - mean_proportions)
 
-    # Estimate concentration from variance
-    concentration_init = np.mean(
-        expected_var / (np.maximum(var_proportions, 1e-6)) - 1
-    )
-    concentration_init = max(0.1, concentration_init)
+        # Estimate concentration from variance
+        concentration_init = np.mean(
+            expected_var / (np.maximum(var_proportions, 1e-6)) - 1
+        )
+        concentration_init = max(0.1, concentration_init)
 
     # Initialize beta: first covariate coefficient to 0, rest small
     beta_init = np.zeros((n_covariates, n_junctions))
@@ -170,50 +182,25 @@ def fit_dm_glm(
     # Flatten parameters for optimization
     params_init = np.concatenate([beta_init.flatten(), [concentration_init]])
 
-    def neg_ll_and_grad(params_flat):
-        """Negative log-likelihood and gradient."""
-        # Unfold parameters
+    def neg_ll(params_flat):
+        """Negative log-likelihood."""
         beta = params_flat[: n_covariates * n_junctions].reshape(
             n_covariates, n_junctions
         )
         concentration = np.maximum(params_flat[n_covariates * n_junctions :], 1e-6)
-
-        # Build alpha matrix
         alpha_matrix = _build_alpha_matrix(design_matrix, beta, concentration)
-
-        # Compute log-likelihood
         ll = dm_log_likelihood_batch(count_matrix, alpha_matrix)
-        neg_ll = -ll
+        return -ll
 
-        # Compute gradient (numerical for simplicity, can be analytical)
-        grad = np.zeros_like(params_flat)
-        eps = 1e-5
-        for i in range(len(params_flat)):
-            params_plus = params_flat.copy()
-            params_plus[i] += eps
-            beta_plus = params_plus[: n_covariates * n_junctions].reshape(
-                n_covariates, n_junctions
-            )
-            conc_plus = np.maximum(
-                params_plus[n_covariates * n_junctions :], 1e-6
-            )
-            alpha_plus = _build_alpha_matrix(design_matrix, beta_plus, conc_plus)
-            ll_plus = dm_log_likelihood_batch(count_matrix, alpha_plus)
-
-            grad[i] = (neg_ll - (-ll_plus)) / eps
-
-        return neg_ll, grad
-
-    # Optimize
     bounds = [
         (None, None) for _ in range(n_covariates * n_junctions)
     ] + [(1e-6, None)]
     result = minimize(
-        lambda p: neg_ll_and_grad(p)[0],
+        neg_ll,
         params_init,
         method=method,
         bounds=bounds,
-        jac=lambda p: neg_ll_and_grad(p)[1],
+        jac="2-point",
         options={"maxiter": max_iter, "ftol": tol},
     )
 
@@ -227,9 +214,10 @@ def fit_dm_glm(
     # Compute final log-likelihood
     ll = dm_log_likelihood_batch(count_matrix, alpha_matrix_hat)
 
-    # Compute gradient norm
-    _, grad_final = neg_ll_and_grad(result.x)
-    gradient_norm = np.linalg.norm(grad_final)
+    # Approximate gradient norm at solution
+    gradient_norm = 0.0
+    if result.jac is not None:
+        gradient_norm = float(np.linalg.norm(result.jac))
 
     return DMGLMResult(
         alpha_matrix=alpha_matrix_hat,
@@ -245,6 +233,7 @@ def fit_dm_null(
     count_matrix: np.ndarray,
     design_matrix_null: np.ndarray,
     max_iter: int = 500,
+    init_from: Optional[DMGLMResult] = None,
 ) -> DMGLMResult:
     """Fit null DM-GLM model (no group effect).
 
@@ -252,10 +241,19 @@ def fit_dm_null(
         count_matrix: Array of shape (n_samples, K) with counts.
         design_matrix_null: Null design matrix (without group indicator).
         max_iter: Maximum iterations for optimization.
+        init_from: Optional DMGLMResult to initialize from (for null-refit).
 
     Returns:
         DMGLMResult for the null model.
     """
+    if init_from is not None:
+        return fit_dm_glm(
+            count_matrix,
+            design_matrix_null,
+            max_iter=max_iter,
+            init_alpha=init_from.alpha_matrix,
+            init_concentration=init_from.concentration,
+        )
     return fit_dm_glm(
         count_matrix,
         design_matrix_null,

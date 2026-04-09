@@ -13,8 +13,8 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from splicekit.core.junction_extractor import JunctionEvidence
-from splicekit.utils.genomic import Junction
+from splice.core.junction_extractor import JunctionEvidence
+from splice.utils.genomic import Junction
 
 
 @dataclass

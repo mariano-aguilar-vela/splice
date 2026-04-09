@@ -7,7 +7,7 @@ Tests chromosome-level parallelism via multiprocessing.
 import unittest
 from typing import Dict, List
 
-from splicekit.utils.parallel import (
+from splice.utils.parallel import (
     get_default_chromosomes,
     parallel_by_chromosome,
 )

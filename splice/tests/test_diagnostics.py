@@ -8,12 +8,12 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.diagnostics import EventDiagnostic, compute_diagnostics
-from splicekit.core.diff import DiffResult
-from splicekit.core.evidence import ModuleEvidence
-from splicekit.core.psi import ModulePSI
-from splicekit.core.splicegraph import SplicingModule
-from splicekit.utils.genomic import Junction
+from splice.core.diagnostics import EventDiagnostic, compute_diagnostics
+from splice.core.diff import DiffResult
+from splice.core.evidence import ModuleEvidence
+from splice.core.psi import ModulePSI
+from splice.core.splicegraph import SplicingModule
+from splice.utils.genomic import Junction
 
 
 class TestEventDiagnosticDataclass(unittest.TestCase):

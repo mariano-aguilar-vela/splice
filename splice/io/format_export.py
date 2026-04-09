@@ -13,8 +13,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from splicekit.core.diff import DiffResult
-from splicekit.core.psi import ModulePSI
+from splice.core.diff import DiffResult
+from splice.core.psi import ModulePSI
 
 
 def export_rmats_format(
@@ -72,24 +72,48 @@ def export_rmats_format(
             if len(diff_result.junction_coords) < 2:
                 continue
 
+            # Parse junction coordinates to get actual positions
+            all_starts = []
+            all_ends = []
+            for jc in diff_result.junction_coords:
+                parts = jc.split(":")
+                if len(parts) >= 2:
+                    coords = parts[1].split("-")
+                    if len(coords) == 2:
+                        all_starts.append(int(coords[0]))
+                        all_ends.append(int(coords[1]))
+
+            if not all_starts:
+                continue
+
+            event_start = min(all_starts)
+            event_end = max(all_ends)
+
+            # Compute inclusion/skipping counts from PSI and total junctions
+            n_juncs = diff_result.n_junctions
+            inc_count_1 = int(np.sum(diff_result.psi_group1[:n_juncs-1]) * 1000) if n_juncs > 1 else 0
+            skip_count_1 = int(diff_result.psi_group1[-1] * 1000) if n_juncs > 0 else 0
+            inc_count_2 = int(np.sum(diff_result.psi_group2[:n_juncs-1]) * 1000) if n_juncs > 1 else 0
+            skip_count_2 = int(diff_result.psi_group2[-1] * 1000) if n_juncs > 0 else 0
+
             row = [
                 f"EVENT_{i:06d}",
                 diff_result.gene_id,
                 diff_result.gene_name,
                 diff_result.chrom,
                 diff_result.strand,
-                "0",  # exonStart_0base (placeholder)
-                "1000",  # exonEnd (placeholder)
-                "0",  # upstreamES
-                "100",  # upstreamEE
-                "900",  # downstreamES
-                "1000",  # downstreamEE
-                "100",  # IC_SAMPLE_1 (included count, placeholder)
-                "50",  # SC_SAMPLE_1 (skipped count, placeholder)
-                "80",  # IC_SAMPLE_2
-                "70",  # SC_SAMPLE_2
-                "100",  # IncFormLen
-                "50",  # SkipFormLen
+                str(event_start),
+                str(event_end),
+                str(event_start),
+                str(all_starts[0] if len(all_starts) > 0 else event_start),
+                str(all_ends[-1] if len(all_ends) > 1 else event_end),
+                str(event_end),
+                str(inc_count_1),
+                str(skip_count_1),
+                str(inc_count_2),
+                str(skip_count_2),
+                str(event_end - event_start),
+                str(max(1, event_end - event_start)),
                 f"{diff_result.p_value:.6e}",
                 f"{diff_result.fdr:.6e}",
                 f"{np.mean(diff_result.psi_group1):.4f}",
@@ -146,12 +170,26 @@ def export_leafcutter_format(
                 else -300
             )
 
+            # Parse actual coordinates from junction coords
+            lc_starts = []
+            lc_ends = []
+            for jc in diff_result.junction_coords:
+                parts = jc.split(":")
+                if len(parts) >= 2:
+                    coords = parts[1].split("-")
+                    if len(coords) == 2:
+                        lc_starts.append(int(coords[0]))
+                        lc_ends.append(int(coords[1]))
+
+            lc_start = min(lc_starts) if lc_starts else 0
+            lc_end = max(lc_ends) if lc_ends else 0
+
             row = [
                 f"cluster_{i:06d}",
                 diff_result.gene_id,
                 diff_result.chrom,
-                str(100),  # start (placeholder)
-                str(1000),  # end (placeholder)
+                str(lc_start),
+                str(lc_end),
                 str(diff_result.n_junctions),
                 exon_coords,
                 f"{np.mean(diff_result.psi_group1):.4f}",

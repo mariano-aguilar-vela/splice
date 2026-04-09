@@ -12,9 +12,9 @@ from typing import List, Optional
 
 import numpy as np
 
-from splicekit.core.diff import DiffResult
-from splicekit.core.evidence import ModuleEvidence
-from splicekit.core.psi import ModulePSI
+from splice.core.diff import DiffResult
+from splice.core.evidence import ModuleEvidence
+from splice.core.psi import ModulePSI
 
 
 @dataclass(frozen=True, slots=True)

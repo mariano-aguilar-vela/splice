@@ -1,0 +1,22 @@
+# SPLICE Authors
+
+## Creator and Developer
+
+**Mariano Aguilar Vela**
+- Email: mariano.aguilarvela@hdr.qut.edu.au
+- BSc Microbiology and Cell Science, University of Florida
+- MSc Biotechnology, University of Queensland
+- PhD Biomedical Science (Candidate), Queensland University of Technology
+
+---
+
+## About SPLICE
+
+SPLICE (Splicegraph Probabilistic Learning for Isoform Change Estimation) is a comprehensive
+differential splicing analysis tool developed by Mariano Aguilar Vela. The tool combines
+annotation-free junction discovery, multi-way statistical testing, covariate regression,
+heterogeneity detection, and functional annotation into a unified framework.
+
+---
+
+For inquiries or contributions, please contact the author at mariano.aguilarvela@hdr.qut.edu.au

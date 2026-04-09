@@ -9,13 +9,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from splicekit.io.bam_utils import (
+from splice.io.bam_utils import (
     ReadEvidence,
     count_exon_body_reads,
     extract_evidence_from_bam,
     extract_evidence_from_read,
 )
-from splicekit.utils.genomic import GenomicInterval, Junction
+from splice.utils.genomic import GenomicInterval, Junction
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +305,7 @@ class TestExtractEvidenceFromBAM:
             create_mock_read(is_unmapped=True),
         ]
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = reads
             evidence_list, stats = extract_evidence_from_bam("mock.bam")
 
@@ -320,7 +320,7 @@ class TestExtractEvidenceFromBAM:
             create_mock_read(mapping_quality=10),
         ]
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = reads
             evidence_list, stats = extract_evidence_from_bam("mock.bam", min_mapq=30)
 
@@ -336,7 +336,7 @@ class TestExtractEvidenceFromBAM:
             blocks=[(100, 110), (115, 125)]
         )
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [read]
             evidence_list, stats = extract_evidence_from_bam("mock.bam")
 
@@ -347,7 +347,7 @@ class TestExtractEvidenceFromBAM:
         """Test that multi-mapped reads are counted correctly."""
         read = create_mock_read(nh_tag=3)
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [read]
             evidence_list, stats = extract_evidence_from_bam("mock.bam")
 
@@ -361,7 +361,7 @@ class TestExtractEvidenceFromBAM:
             create_mock_read(mapping_quality=10),
         ]
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = reads
             evidence_list, stats = extract_evidence_from_bam("mock.bam")
 
@@ -373,7 +373,7 @@ class TestExtractEvidenceFromBAM:
         """Test extracting evidence from a specific region."""
         read = create_mock_read()
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [read]
             evidence_list, stats = extract_evidence_from_bam(
                 "mock.bam", region="chr1:100-200"
@@ -387,7 +387,7 @@ class TestExtractEvidenceFromBAM:
 
     def test_empty_bam(self):
         """Test extracting from an empty BAM."""
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = []
             evidence_list, stats = extract_evidence_from_bam("mock.bam")
 
@@ -422,7 +422,7 @@ class TestCountExonBodyReads:
 
         exon = GenomicInterval("chr1", 100, 150, "+")
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [
                 read1, read2
             ]
@@ -442,7 +442,7 @@ class TestCountExonBodyReads:
 
         exon = GenomicInterval("chr1", 100, 150, "+")
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [read]
             raw_count, weighted_count = count_exon_body_reads("mock.bam", exon)
 
@@ -459,7 +459,7 @@ class TestCountExonBodyReads:
 
         exon = GenomicInterval("chr1", 100, 150, "+")
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [read]
             raw_count, weighted_count = count_exon_body_reads("mock.bam", exon)
 
@@ -472,7 +472,7 @@ class TestCountExonBodyReads:
 
         exon = GenomicInterval("chr1", 100, 150, "+")
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [
                 read1, read2
             ]
@@ -496,7 +496,7 @@ class TestCountExonBodyReads:
 
         exon = GenomicInterval("chr1", 100, 150, "+")
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [
                 read1, read2
             ]
@@ -512,7 +512,7 @@ class TestCountExonBodyReads:
         """Test counting reads in an exon with no reads."""
         exon = GenomicInterval("chr1", 5000, 5100, "+")
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = []
             raw_count, weighted_count = count_exon_body_reads("mock.bam", exon)
 
@@ -527,7 +527,7 @@ class TestCountExonBodyReads:
 
         exon = GenomicInterval("chr1", 100, 150, "+")
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [
                 read_unmapped, read_secondary, read_duplicate
             ]
@@ -551,7 +551,7 @@ class TestIntegration:
             blocks=[(100, 110), (120, 130)]
         )
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [read]
             evidence_list, stats = extract_evidence_from_bam("mock.bam")
 
@@ -567,7 +567,7 @@ class TestIntegration:
             blocks=[(100, 110), (115, 125), (130, 140), (145, 155)]
         )
 
-        with patch("splicekit.io.bam_utils.pysam") as mock_pysam:
+        with patch("splice.io.bam_utils.pysam") as mock_pysam:
             mock_pysam.AlignmentFile.return_value.__enter__.return_value.fetch.return_value = [read]
             evidence_list, stats = extract_evidence_from_bam("mock.bam")
 

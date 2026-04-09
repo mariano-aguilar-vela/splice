@@ -1,6 +1,6 @@
-# SPLICE: The Definitive Differential Splicing Analysis Tool
+# SPLICE: Splicegraph Probabilistic Learning for Isoform Change Estimation
 
-**SPLICE** (Simple Platform for Locating Isoform Complexity Events) is a comprehensive platform for discovery and analysis of differential splicing events in RNA-seq data. It combines annotation-free junction discovery, multi-way statistical testing, covariate regression, heterogeneity detection, and functional annotation into a single unified framework.
+**SPLICE** (Splicegraph Probabilistic Learning for Isoform Change Estimation) is a comprehensive platform for discovery and analysis of differential splicing events in RNA-seq data. It combines annotation-free junction discovery, multi-way statistical testing, covariate regression, heterogeneity detection, and functional annotation into a single unified framework.
 
 **Version:** 1.0.0  
 **License:** MIT  
@@ -555,6 +555,16 @@ We welcome contributions! Please:
 4. Commit changes (`git commit -am 'Add feature'`)
 5. Push to branch (`git push origin feature/my-feature`)
 6. Open a Pull Request
+
+---
+
+## Author
+
+**Mariano Aguilar Vela**  
+- BSc Microbiology and Cell Science, University of Florida
+- MSc Biotechnology, University of Queensland
+- PhD Biomedical Science (Candidate), Queensland University of Technology
+- Email: mariano.aguilarvela@hdr.qut.edu.au
 
 ---
 

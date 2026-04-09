@@ -8,11 +8,11 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.diff import DiffResult, test_differential_splicing
-from splicekit.core.evidence import ModuleEvidence
-from splicekit.core.psi import ModulePSI
-from splicekit.core.splicegraph import SplicingModule
-from splicekit.utils.genomic import Junction
+from splice.core.diff import DiffResult, differential_splicing
+from splice.core.evidence import ModuleEvidence
+from splice.core.psi import ModulePSI
+from splice.core.splicegraph import SplicingModule
+from splice.utils.genomic import Junction
 
 
 class TestDiffResultDataclass(unittest.TestCase):
@@ -159,7 +159,7 @@ class TestDifferentialSplicingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
 
-        results = test_differential_splicing(
+        results = differential_splicing(
             [evidence], [psi], group_labels, min_total_reads_per_group=10
         )
 
@@ -179,7 +179,7 @@ class TestDifferentialSplicingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_differential_splicing(
+        results = differential_splicing(
             [evidence], [psi], group_labels, min_total_reads_per_group=5
         )
 
@@ -197,7 +197,7 @@ class TestDifferentialSplicingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_differential_splicing(
+        results = differential_splicing(
             [evidence], [psi], group_labels, min_total_reads_per_group=5
         )
 
@@ -223,7 +223,7 @@ class TestDifferentialSplicingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_differential_splicing(
+        results = differential_splicing(
             evidence_list, psi_list, group_labels, min_total_reads_per_group=5
         )
 
@@ -239,7 +239,7 @@ class TestDifferentialSplicingBasic(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
-        results = test_differential_splicing(
+        results = differential_splicing(
             [evidence], [psi], group_labels, min_total_reads_per_group=5
         )
 
@@ -323,7 +323,7 @@ class TestDifferentialSplicingMultipleModules(unittest.TestCase):
 
         group_labels = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
 
-        results = test_differential_splicing(
+        results = differential_splicing(
             evidence_list, psi_list, group_labels, min_total_reads_per_group=10
         )
 
@@ -401,7 +401,7 @@ class TestDifferentialSplicingWithCovariates(unittest.TestCase):
         group_labels = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
         covariates = np.random.randn(12)
 
-        results = test_differential_splicing(
+        results = differential_splicing(
             [evidence],
             [psi],
             group_labels,

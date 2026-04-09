@@ -11,10 +11,10 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from splicekit.core.diff import DiffResult
-from splicekit.core.diagnostics import EventDiagnostic
-from splicekit.core.nmd_classifier import NMDClassification
-from splicekit.utils.genomic import Junction
+from splice.core.diff import DiffResult
+from splice.core.diagnostics import EventDiagnostic
+from splice.core.nmd_classifier import NMDClassification
+from splice.utils.genomic import Junction
 
 
 def write_results_tsv(

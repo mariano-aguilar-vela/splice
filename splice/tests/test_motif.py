@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from splicekit.utils.motif import (
+from splice.utils.motif import (
     MOTIF_SCORES,
     classify_motif,
     extract_motif_from_genome,

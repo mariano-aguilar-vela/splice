@@ -13,13 +13,13 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from splicekit.core.effective_length import (
+from splice.core.effective_length import (
     compute_effective_lengths_for_module,
     length_normalize_counts,
 )
-from splicekit.core.junction_extractor import JunctionEvidence
-from splicekit.core.splicegraph import SplicingModule
-from splicekit.utils.genomic import Junction
+from splice.core.junction_extractor import JunctionEvidence
+from splice.core.splicegraph import SplicingModule
+from splice.utils.genomic import Junction
 
 
 @dataclass

@@ -8,10 +8,10 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.evidence import ModuleEvidence
-from splicekit.core.psi import ModulePSI, quantify_psi
-from splicekit.core.splicegraph import SplicingModule
-from splicekit.utils.genomic import Junction
+from splice.core.evidence import ModuleEvidence
+from splice.core.psi import ModulePSI, quantify_psi
+from splice.core.splicegraph import SplicingModule
+from splice.utils.genomic import Junction
 
 
 class TestModulePSIDataclass(unittest.TestCase):

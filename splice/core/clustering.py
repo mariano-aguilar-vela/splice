@@ -1,18 +1,19 @@
 """
 Module 7: core/clustering.py
 
-Annotation-free intron clustering using the LeafCutter algorithm.
-Clusters junctions by coordinate overlap and shared splice sites.
+Annotation-free intron clustering using bipartite-graph union-find.
+Clusters junctions by shared splice sites in O(N) time.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
 import numpy as np
 
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
 
 
 @dataclass
@@ -42,28 +43,58 @@ class JunctionCluster:
         return len(self.junctions)
 
 
+class _UnionFind:
+    """Disjoint set with path compression and union by rank."""
+
+    def __init__(self):
+        self.parent = {}
+        self.rank = {}
+
+    def find(self, x):
+        if x not in self.parent:
+            self.parent[x] = x
+            self.rank[x] = 0
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+
+    def union(self, x, y):
+        rx, ry = self.find(x), self.find(y)
+        if rx == ry:
+            return
+        if self.rank[rx] < self.rank[ry]:
+            rx, ry = ry, rx
+        self.parent[ry] = rx
+        if self.rank[rx] == self.rank[ry]:
+            self.rank[rx] += 1
+
+
 def cluster_junctions(
     junctions: List[Junction],
     max_intron_length: int = 100000,
     min_cluster_size: int = 2,
 ) -> List[JunctionCluster]:
-    """Cluster junctions using the LeafCutter algorithm.
+    """Cluster junctions using bipartite-graph union-find.
 
-    Groups junctions by coordinate overlap and shared splice sites. This
-    annotation-free approach identifies intronic regions that show complex
-    splicing patterns.
+    Each junction is an edge connecting its donor site to its acceptor site
+    in a bipartite graph. Two junctions sharing a splice site (donor or acceptor)
+    are in the same connected component. Finding connected components with
+    union-find is O(N * alpha(N)), effectively O(N) linear time.
 
     Algorithm:
-    1. Group junctions by chromosome and strand
-    2. Within each (chrom, strand) pair, find junctions with overlapping introns
-    3. Refine by merging junctions that share splice sites
-    4. Apply ratio pruning (remove low-count junctions)
-    5. Return clusters with at least min_cluster_size members
+    1. Filter junctions exceeding max_intron_length.
+    2. For each junction, create a site key for its donor and acceptor.
+       Union the junction's donor site key with its acceptor site key.
+       Since all junctions sharing a donor will union through that donor's
+       site key, and all junctions sharing an acceptor will union through
+       that acceptor's site key, connected components emerge automatically.
+    3. Group junctions by their root in the union-find.
+    4. Discard clusters with fewer than min_cluster_size junctions.
 
     Args:
-        junctions: List of Junction objects to cluster.
-        max_intron_length: Maximum intron length to consider (default 100kb).
-        min_cluster_size: Minimum number of junctions per cluster (default 2).
+        junctions: List of Junction objects.
+        max_intron_length: Maximum intron length (default 100kb).
+        min_cluster_size: Minimum junctions per cluster (default 2).
 
     Returns:
         List of JunctionCluster objects.
@@ -71,145 +102,51 @@ def cluster_junctions(
     if not junctions:
         return []
 
-    # Group junctions by (chrom, strand)
-    by_region: Dict[tuple, List[Junction]] = {}
+    uf = _UnionFind()
+
+    junction_keys = {}
+    valid_junctions = []
+
     for junc in junctions:
-        key = (junc.chrom, junc.strand)
-        if key not in by_region:
-            by_region[key] = []
-        by_region[key].append(junc)
-
-    clusters: List[JunctionCluster] = []
-    cluster_counter = 0
-
-    # Cluster within each (chrom, strand) region
-    for (chrom, strand), region_junctions in by_region.items():
-        # Sort by start position for efficient clustering
-        sorted_junctions = sorted(region_junctions, key=lambda j: (j.start, j.end))
-
-        # Find clusters by overlap
-        region_clusters = _find_overlapping_clusters(
-            sorted_junctions, max_intron_length
-        )
-
-        # Refine by shared splice sites
-        for cluster_junctions_list in region_clusters:
-            refined = _refine_by_splice_sites(cluster_junctions_list)
-
-            for cluster_group in refined:
-                if len(cluster_group) >= min_cluster_size:
-                    cluster_id = f"{chrom}:{strand}:{cluster_counter}"
-                    cluster_counter += 1
-
-                    min_start = min(j.start for j in cluster_group)
-                    max_end = max(j.end for j in cluster_group)
-
-                    cluster = JunctionCluster(
-                        cluster_id=cluster_id,
-                        junctions=cluster_group,
-                        chrom=chrom,
-                        strand=strand,
-                        start=min_start,
-                        end=max_end,
-                    )
-                    clusters.append(cluster)
-
-    return clusters
-
-
-def _find_overlapping_clusters(
-    sorted_junctions: List[Junction], max_intron_length: int
-) -> List[List[Junction]]:
-    """Find clusters of junctions with overlapping introns.
-
-    Uses a greedy algorithm: start a new cluster when no junction in the
-    current cluster overlaps with a candidate junction.
-
-    Args:
-        sorted_junctions: Junctions sorted by start position.
-        max_intron_length: Maximum allowed intron length.
-
-    Returns:
-        List of clusters, where each cluster is a list of junctions.
-    """
-    if not sorted_junctions:
-        return []
-
-    clusters: List[List[Junction]] = []
-    current_cluster: List[Junction] = []
-    cluster_end = 0
-
-    for junc in sorted_junctions:
-        # Skip junctions that exceed max intron length
         if junc.end - junc.start > max_intron_length:
             continue
+        valid_junctions.append(junc)
 
-        # Check if this junction overlaps with current cluster
-        if current_cluster and junc.start > cluster_end:
-            # No overlap, start new cluster
-            if current_cluster:
-                clusters.append(current_cluster)
-            current_cluster = [junc]
-            cluster_end = junc.end
-        else:
-            # Overlaps, add to current cluster
-            current_cluster.append(junc)
-            cluster_end = max(cluster_end, junc.end)
+        junc_key = f"J:{junc.chrom}:{junc.strand}:{junc.start}:{junc.end}"
+        donor_key = f"S:{junc.chrom}:{junc.strand}:{junc.start}"
+        acceptor_key = f"S:{junc.chrom}:{junc.strand}:{junc.end}"
 
-    # Don't forget the last cluster
-    if current_cluster:
-        clusters.append(current_cluster)
+        junction_keys[junc] = junc_key
+
+        uf.union(junc_key, donor_key)
+        uf.union(junc_key, acceptor_key)
+
+    # Group junctions by their component root
+    components = defaultdict(list)
+    for junc in valid_junctions:
+        root = uf.find(junction_keys[junc])
+        components[root].append(junc)
+
+    # Build JunctionCluster objects
+    clusters = []
+    cluster_counter = 0
+    for root, cluster_juncs in components.items():
+        if len(cluster_juncs) < min_cluster_size:
+            continue
+        chrom = cluster_juncs[0].chrom
+        strand = cluster_juncs[0].strand
+        cluster_id = f"{chrom}:{strand}:{cluster_counter}"
+        cluster_counter += 1
+        clusters.append(JunctionCluster(
+            cluster_id=cluster_id,
+            junctions=cluster_juncs,
+            chrom=chrom,
+            strand=strand,
+            start=min(j.start for j in cluster_juncs),
+            end=max(j.end for j in cluster_juncs),
+        ))
 
     return clusters
-
-
-def _refine_by_splice_sites(junctions: List[Junction]) -> List[List[Junction]]:
-    """Refine clusters by shared splice sites.
-
-    Junctions that share a donor or acceptor site are likely part of the
-    same splicing module (e.g., alternative 5' or 3' sites). This function
-    identifies subclusters based on splice site connectivity.
-
-    Args:
-        junctions: List of junctions in a cluster.
-
-    Returns:
-        List of refined clusters (subclusters).
-    """
-    if len(junctions) <= 1:
-        return [junctions]
-
-    # Build connectivity graph: edges between junctions that share splice sites
-    n = len(junctions)
-    adjacency = [[False] * n for _ in range(n)]
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if junctions[i].shares_splice_site(junctions[j]):
-                adjacency[i][j] = True
-                adjacency[j][i] = True
-
-    # Find connected components using DFS
-    visited = [False] * n
-    components: List[List[Junction]] = []
-
-    def dfs(node: int, component: List[int]) -> None:
-        visited[node] = True
-        component.append(node)
-        for neighbor in range(n):
-            if adjacency[node][neighbor] and not visited[neighbor]:
-                dfs(neighbor, component)
-
-    for i in range(n):
-        if not visited[i]:
-            component_indices: List[int] = []
-            dfs(i, component_indices)
-            component_junctions = [junctions[idx] for idx in component_indices]
-            components.append(component_junctions)
-
-    # If a component only has 1 junction, merge it with the largest component
-    # (or just keep singletons for now)
-    return components
 
 
 def get_cluster_junctions(cluster: JunctionCluster) -> Set[Junction]:

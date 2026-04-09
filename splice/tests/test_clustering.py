@@ -11,14 +11,14 @@ Tests the LeafCutter clustering algorithm including:
 import unittest
 from typing import List
 
-from splicekit.core.clustering import (
+from splice.core.clustering import (
     JunctionCluster,
     cluster_junctions,
     get_cluster_junctions,
     filter_clusters_by_size,
     filter_clusters_by_region,
 )
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
 
 
 class TestJunctionCluster(unittest.TestCase):

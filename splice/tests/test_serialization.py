@@ -10,16 +10,16 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.diff import DiffResult
-from splicekit.core.diagnostics import EventDiagnostic
-from splicekit.core.psi import ModulePSI
-from splicekit.io.serialization import (
+from splice.core.diff import DiffResult
+from splice.core.diagnostics import EventDiagnostic
+from splice.core.psi import ModulePSI
+from splice.io.serialization import (
     load_checkpoint,
     load_junction_evidence,
     save_checkpoint,
     save_junction_evidence,
 )
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
 
 
 class TestSaveLoadCheckpoint(unittest.TestCase):

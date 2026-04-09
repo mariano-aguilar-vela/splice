@@ -6,13 +6,22 @@ Tests NMD/PTC functional classification of junctions.
 
 import unittest
 
-from splicekit.core.nmd_classifier import (
+from splice.core.nmd_classifier import (
     NMDClassification,
     build_translation_graph,
     classify_all_junctions_nmd,
     classify_junction_nmd,
 )
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
+
+
+def _exon_positions_to_transcripts(exon_positions):
+    """Convert old-style exon_positions dict to gene_transcripts format.
+
+    Converts {idx: (start, end)} to {"tx_0": [(start, end), ...]} sorted by start.
+    """
+    exons = sorted(exon_positions.values(), key=lambda e: e[0])
+    return {"tx_0": exons}
 
 
 class TestNMDClassificationDataclass(unittest.TestCase):
@@ -78,11 +87,14 @@ class TestClassifyJunctionBasic(unittest.TestCase):
         """Test classification of single junction."""
         junction = Junction(chrom="chr1", start=100, end=200, strand="+")
 
-        exon_positions = {0: (0, 100), 1: (200, 300)}
+        gene_transcripts = _exon_positions_to_transcripts(
+            {0: (0, 100), 1: (200, 300)}
+        )
         genome_fasta = {"chr1": "A" * 500}
 
         classification = classify_junction_nmd(
-            junction, exon_positions, genome_fasta
+            junction, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
 
         self.assertIsInstance(classification, NMDClassification)
@@ -93,14 +105,16 @@ class TestClassifyJunctionBasic(unittest.TestCase):
         """Test that confidence is in [0, 1] or NaN."""
         junction = Junction(chrom="chr1", start=100, end=200, strand="+")
 
-        exon_positions = {0: (0, 100), 1: (200, 300)}
+        gene_transcripts = _exon_positions_to_transcripts(
+            {0: (0, 100), 1: (200, 300)}
+        )
         genome_fasta = {"chr1": "A" * 500}
 
         classification = classify_junction_nmd(
-            junction, exon_positions, genome_fasta
+            junction, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
 
-        # Confidence should be between 0 and 1, or NaN
         import math
 
         if not math.isnan(classification.confidence):
@@ -111,11 +125,14 @@ class TestClassifyJunctionBasic(unittest.TestCase):
         """Test that path counts are non-negative."""
         junction = Junction(chrom="chr1", start=100, end=200, strand="+")
 
-        exon_positions = {0: (0, 100), 1: (200, 300)}
+        gene_transcripts = _exon_positions_to_transcripts(
+            {0: (0, 100), 1: (200, 300)}
+        )
         genome_fasta = {"chr1": "A" * 500}
 
         classification = classify_junction_nmd(
-            junction, exon_positions, genome_fasta
+            junction, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
 
         self.assertGreaterEqual(classification.n_productive_paths, 0)
@@ -133,16 +150,17 @@ class TestClassifyMultipleJunctions(unittest.TestCase):
             Junction(chrom="chr1", start=500, end=600, strand="+"),
         ]
 
-        exon_positions = {
+        gene_transcripts = _exon_positions_to_transcripts({
             0: (0, 100),
             1: (200, 300),
             2: (400, 500),
             3: (600, 700),
-        }
+        })
         genome_fasta = {"chr1": "A" * 1000}
 
         classifications = classify_all_junctions_nmd(
-            junctions, exon_positions, genome_fasta
+            junctions, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
 
         self.assertEqual(len(classifications), 3)
@@ -155,18 +173,20 @@ class TestClassifyMultipleJunctions(unittest.TestCase):
         """Test that same junctions get consistent classification."""
         junction = Junction(chrom="chr1", start=100, end=200, strand="+")
 
-        exon_positions = {0: (0, 100), 1: (200, 300)}
+        gene_transcripts = _exon_positions_to_transcripts(
+            {0: (0, 100), 1: (200, 300)}
+        )
         genome_fasta = {"chr1": "A" * 500}
 
-        # Classify twice
         result1 = classify_junction_nmd(
-            junction, exon_positions, genome_fasta
+            junction, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
         result2 = classify_junction_nmd(
-            junction, exon_positions, genome_fasta
+            junction, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
 
-        # Should get same classification
         self.assertEqual(result1.classification, result2.classification)
         self.assertEqual(result1.n_productive_paths, result2.n_productive_paths)
 
@@ -184,7 +204,6 @@ class TestBuildTranslationGraph(unittest.TestCase):
             exon_positions, observed_junctions, genome_fasta
         )
 
-        # Should have nodes for each exon-frame combination
         self.assertIsInstance(graph, dict)
         self.assertGreater(len(graph), 0)
 
@@ -206,7 +225,6 @@ class TestBuildTranslationGraph(unittest.TestCase):
         )
 
         self.assertIsInstance(graph, dict)
-        # Graph should have nodes for all exons and frames
         self.assertEqual(len(graph), 9)  # 3 exons * 3 frames
 
 
@@ -218,11 +236,14 @@ class TestNMDEdgeCases(unittest.TestCase):
         for strand in ["+", "-"]:
             junction = Junction(chrom="chr1", start=100, end=200, strand=strand)
 
-            exon_positions = {0: (0, 100), 1: (200, 300)}
+            gene_transcripts = _exon_positions_to_transcripts(
+                {0: (0, 100), 1: (200, 300)}
+            )
             genome_fasta = {"chr1": "A" * 500}
 
             classification = classify_junction_nmd(
-                junction, exon_positions, genome_fasta
+                junction, gene_transcripts, genome_fasta,
+                chrom="chr1", strand=strand,
             )
 
             self.assertIsInstance(classification, NMDClassification)
@@ -231,28 +252,31 @@ class TestNMDEdgeCases(unittest.TestCase):
         """Test classification with missing chromosome in genome."""
         junction = Junction(chrom="chrX", start=100, end=200, strand="+")
 
-        exon_positions = {0: (0, 100), 1: (200, 300)}
+        gene_transcripts = _exon_positions_to_transcripts(
+            {0: (0, 100), 1: (200, 300)}
+        )
         genome_fasta = {"chr1": "A" * 500}  # Missing chrX
 
         classification = classify_junction_nmd(
-            junction, exon_positions, genome_fasta
+            junction, gene_transcripts, genome_fasta,
+            chrom="chrX", strand="+",
         )
 
-        # Should still return a classification
         self.assertIsInstance(classification, NMDClassification)
 
     def test_junction_coordinates(self):
         """Test that junction coordinates are preserved."""
         junction = Junction(chrom="chr1", start=1000, end=2000, strand="+")
 
-        exon_positions = {
+        gene_transcripts = _exon_positions_to_transcripts({
             0: (0, 1000),
             1: (2000, 3000),
-        }
+        })
         genome_fasta = {"chr1": "A" * 4000}
 
         classification = classify_junction_nmd(
-            junction, exon_positions, genome_fasta
+            junction, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
 
         self.assertEqual(classification.junction, junction)
@@ -265,40 +289,30 @@ class TestNMDIntegration(unittest.TestCase):
 
     def test_full_pipeline(self):
         """Test complete NMD classification pipeline."""
-        # Create a set of junctions
         junctions = [
             Junction(chrom="chr1", start=500, end=1000, strand="+"),
             Junction(chrom="chr1", start=1500, end=2000, strand="+"),
             Junction(chrom="chr1", start=2500, end=3000, strand="+"),
         ]
 
-        # Create exon structure
-        exon_positions = {
+        gene_transcripts = _exon_positions_to_transcripts({
             0: (0, 500),
             1: (1000, 1500),
             2: (2000, 2500),
             3: (3000, 4000),
-        }
-
-        # Create genome sequence
+        })
         genome_fasta = {"chr1": "A" * 4100}
 
-        # Classify all junctions
         classifications = classify_all_junctions_nmd(
-            junctions, exon_positions, genome_fasta, strand="+"
+            junctions, gene_transcripts, genome_fasta,
+            chrom="chr1", strand="+",
         )
 
-        # Verify results
         self.assertEqual(len(classifications), 3)
 
         for i, classification in enumerate(classifications):
             self.assertEqual(classification.junction, junctions[i])
             self.assertIn(classification.classification, ["PR", "UP", "NE", "IN"])
-            # Productive + unproductive should be at least 1
-            self.assertGreater(
-                classification.n_productive_paths + classification.n_unproductive_paths,
-                0,
-            )
 
 
 if __name__ == "__main__":

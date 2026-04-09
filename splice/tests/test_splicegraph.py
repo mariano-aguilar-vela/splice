@@ -11,8 +11,8 @@ Tests splicegraph module building including:
 import unittest
 from dataclasses import dataclass
 
-from splicekit.core.clustering import JunctionCluster
-from splicekit.core.splicegraph import (
+from splice.core.clustering import JunctionCluster
+from splice.core.splicegraph import (
     SplicingModule,
     build_splicegraph,
     filter_modules_by_size,
@@ -20,7 +20,7 @@ from splicekit.core.splicegraph import (
     filter_modules_by_region,
     get_module_junctions,
 )
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
 
 
 @dataclass

@@ -12,8 +12,8 @@ from typing import Dict, List, Set, Tuple
 
 import numpy as np
 
-from splicekit.core.junction_extractor import CooccurrenceEvidence
-from splicekit.utils.genomic import Junction, JunctionPair
+from splice.core.junction_extractor import CooccurrenceEvidence
+from splice.utils.genomic import Junction, JunctionPair
 
 
 @dataclass

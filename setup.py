@@ -1,7 +1,7 @@
 """
-SPLICE: Simple Platform for Locating Isoform Complexity Events
+SPLICE: Splicegraph Probabilistic Learning for Isoform Change Estimation
 
-The definitive differential splicing analysis tool. A comprehensive platform
+Splicegraph Probabilistic Learning for Isoform Change Estimation. A comprehensive platform
 for discovery and analysis of differential splicing events in RNA-seq data.
 Combines annotation-free junction discovery, multi-way statistical testing,
 covariate regression, heterogeneity detection, and functional annotation into
@@ -20,7 +20,7 @@ if readme_file.exists():
 setup(
     name="splice",
     version="1.0.0",
-    description="SPLICE: The definitive differential splicing analysis tool",
+    description="SPLICE: Splicegraph Probabilistic Learning for Isoform Change Estimation",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Mariano Aguilar Vela",
@@ -61,7 +61,7 @@ setup(
         "scipy>=1.11.0",
         "pandas>=2.0.0",
         "statsmodels>=0.14.0",
-        "click>=8.1.0",
+        "click>=7.0.0",
         "tqdm>=4.65.0",
         "pyarrow>=14.0.0",
         "pyfastx>=2.0.0",

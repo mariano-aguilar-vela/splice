@@ -11,7 +11,7 @@ from typing import List, Tuple
 
 import numpy as np
 
-from splicekit.utils.genomic import GenomicInterval, Junction
+from splice.utils.genomic import GenomicInterval, Junction
 
 
 def compute_se_effective_lengths(
@@ -59,12 +59,9 @@ def compute_effective_lengths_for_module(
 ) -> np.ndarray:
     """Compute effective length for each junction in a module.
 
-    For junction counting evidence, effective length is the number of
-    unique read starting positions that can span that junction.
-
-    effective_length = read_length - 2 * anchor_length + 1
-
-    For exon body evidence, effective_length = max(0, exon_length - read_length + 1).
+    When gene exons are available, computes exon-aware effective lengths
+    that account for short exons flanking the junction. Otherwise falls
+    back to the default formula.
 
     Args:
         module_junctions: List of Junction objects in module.
@@ -78,9 +75,29 @@ def compute_effective_lengths_for_module(
     n = len(module_junctions)
     effective_lengths = np.zeros(n, dtype=float)
 
-    # For junction evidence: simple formula based on read length and anchor
-    for i in range(n):
-        effective_lengths[i] = read_length - 2 * anchor_length + 1
+    default_eff_len = max(1.0, read_length - 2 * anchor_length + 1)
+
+    if not gene_exons:
+        effective_lengths[:] = default_eff_len
+        return effective_lengths
+
+    for i, junc in enumerate(module_junctions):
+        donor_exon = None
+        acceptor_exon = None
+        for exon in gene_exons:
+            if exon.chrom == junc.chrom:
+                if exon.end == junc.start:
+                    donor_exon = exon
+                if exon.start == junc.end:
+                    acceptor_exon = exon
+
+        if donor_exon is not None and acceptor_exon is not None:
+            donor_available = min(donor_exon.length, read_length - anchor_length)
+            acceptor_available = min(acceptor_exon.length, read_length - anchor_length)
+            eff_len = max(1.0, donor_available + acceptor_available - read_length + 1)
+            effective_lengths[i] = eff_len
+        else:
+            effective_lengths[i] = default_eff_len
 
     return effective_lengths
 
@@ -120,17 +137,30 @@ def length_normalize_counts(
     Handles zero effective lengths by returning 0 for those positions.
 
     Args:
-        counts: Count array (any shape).
-        effective_lengths: Effective length array (same shape as counts).
+        counts: Count array of shape (n_junctions,) or (n_junctions, n_samples).
+        effective_lengths: Effective length array of shape (n_junctions,).
 
     Returns:
         Normalized array (same shape as counts).
     """
-    # Avoid division by zero
-    normalized = np.zeros_like(counts, dtype=float)
-    nonzero_mask = effective_lengths > 0
+    counts_float = counts.astype(float)
 
-    normalized[nonzero_mask] = counts[nonzero_mask] / effective_lengths[nonzero_mask]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if counts.ndim == 1:
+            # 1D case: element-wise division
+            normalized = np.where(
+                effective_lengths > 0,
+                counts_float / effective_lengths,
+                0.0
+            )
+        else:
+            # 2D case: reshape effective_lengths for broadcasting
+            effective_lengths_reshaped = effective_lengths.reshape(-1, 1)
+            normalized = np.where(
+                effective_lengths_reshaped > 0,
+                counts_float / effective_lengths_reshaped,
+                0.0
+            )
 
     return normalized
 

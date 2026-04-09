@@ -13,15 +13,15 @@ from typing import List, Optional
 
 import numpy as np
 
-from splicekit.core.evidence import ModuleEvidence
-from splicekit.core.psi import ModulePSI
-from splicekit.utils.dm_glm import (
+from splice.core.evidence import ModuleEvidence
+from splice.core.psi import ModulePSI
+from splice.utils.dm_glm import (
     build_design_matrix,
     dm_lrt,
     fit_dm_full,
     fit_dm_null,
 )
-from splicekit.utils.stats import benjamini_hochberg
+from splice.utils.stats import benjamini_hochberg
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +97,7 @@ class DiffResult:
     full_gradient_norm: float
 
 
-def test_differential_splicing(
+def differential_splicing(
     module_evidence_list: List[ModuleEvidence],
     module_psi_list: List[ModulePSI],
     group_labels: np.ndarray,
@@ -174,6 +174,18 @@ def test_differential_splicing(
         # LRT
         p_value = dm_lrt(result_null, result_full, df)
 
+        # Null-refit strategy (following LeafCutter dm_glm_multi_conc.R lines 79-92)
+        null_refit_used = False
+        if p_value < 0.001:
+            result_null_refit = fit_dm_null(
+                count_matrix_t, design_null, max_iter=500,
+                init_from=result_full,
+            )
+            if result_null_refit.log_likelihood > result_null.log_likelihood:
+                result_null = result_null_refit
+                p_value = dm_lrt(result_null, result_full, df)
+                null_refit_used = True
+
         # Compute PSI by group
         group_0_mask = group_labels == 0
         group_1_mask = group_labels == 1
@@ -229,7 +241,7 @@ def test_differential_splicing(
             fdr=1.0,  # Will be set after BH correction
             null_converged=result_null.converged,
             full_converged=result_full.converged,
-            null_refit_used=False,  # Will implement null-refit if needed
+            null_refit_used=null_refit_used,
             null_iterations=result_null.n_iterations,
             full_iterations=result_full.n_iterations,
             null_gradient_norm=result_null.gradient_norm,

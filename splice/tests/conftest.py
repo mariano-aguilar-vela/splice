@@ -20,7 +20,7 @@ import numpy as np
 import pysam
 import pytest
 
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
 
 # ─── Read and sequence parameters ─────────────────────────────────────────────
 READ_LENGTH = 50      # synthetic read length (bp)
@@ -70,9 +70,9 @@ J_C4 = Junction("chr1", 9600, 10000, "+")    # exon4->exon5
 J_C5_NOVEL = Junction("chr1", 8100, 9000, "+")  # novel: exon1->exon3 skip
 
 # Group 1: more reads for C1/C2 pathway
-_C_G1_COUNTS = {J_C1: 20, J_C2: 20, J_C3: 5, J_C4: 5, J_C5_NOVEL: 10}
+_C_G1_COUNTS = {J_C1: 20, J_C2: 20, J_C3: 10, J_C4: 10, J_C5_NOVEL: 10}
 # Group 2: more reads for C3/C4 pathway
-_C_G2_COUNTS = {J_C1: 5, J_C2: 5, J_C3: 20, J_C4: 20, J_C5_NOVEL: 10}
+_C_G2_COUNTS = {J_C1: 10, J_C2: 10, J_C3: 20, J_C4: 20, J_C5_NOVEL: 10}
 
 
 # ─── Helper functions ─────────────────────────────────────────────────────────
@@ -179,16 +179,17 @@ def _write_sorted_indexed_bam(
         reads: list of AlignedSegments
     """
     # Write unsorted BAM
-    unsorted_path = bam_path + ".unsorted"
+    bam_path_str = str(bam_path)
+    unsorted_path = bam_path_str + ".unsorted"
     with pysam.AlignmentFile(unsorted_path, "wb", header=header) as bam:
         for read in reads:
             bam.write(read)
 
     # Sort by coordinate
-    pysam.sort("-o", bam_path, unsorted_path)
+    pysam.sort("-o", bam_path_str, unsorted_path)
 
     # Create index
-    pysam.index(bam_path)
+    pysam.index(bam_path_str)
 
     # Clean up unsorted file
     os.unlink(unsorted_path)
@@ -202,6 +203,9 @@ def _build_sample_reads(
     """
     Build list of reads for one sample based on junction counts.
 
+    For Gene C, create multi-junction reads for co-occurrence evidence by
+    manually creating reads that span consecutive junctions (C1->C2, C2->C3, etc.).
+
     Args:
         header: pysam AlignmentHeader
         sample_name: sample identifier for read names
@@ -211,6 +215,36 @@ def _build_sample_reads(
         List of AlignedSegments (not yet sorted)
     """
     reads = []
+
+    # For Gene C, create multi-junction reads for co-occurrence evidence
+    # Create reads spanning C1->C2 (exon1->exon2->exon3)
+    if J_C1 in junction_counts and J_C2 in junction_counts:
+        for read_idx in range(3):
+            # Read spans: exon1(anchor) + intron + exon2(minimal) + intron + exon3(remaining)
+            read_name = f"{sample_name}_c1c2_{read_idx}"
+            ref_start = J_C1.start - ANCHOR  # Start at exon1 - anchor
+            intron1_len = J_C1.end - J_C1.start  # C1 intron
+            intron2_len = J_C2.end - J_C2.start  # C2 intron
+            exon1_bases = ANCHOR  # 25
+            exon2_bases = 2  # minimal middle exon
+            exon3_bases = READ_LENGTH - exon1_bases - exon2_bases  # 23
+            cigar = [(0, exon1_bases), (3, intron1_len), (0, exon2_bases), (3, intron2_len), (0, exon3_bases)]
+            reads.append(_make_aligned_read(header, read_name, ref_start, cigar))
+
+    # Create reads spanning C2->C3
+    if J_C2 in junction_counts and J_C3 in junction_counts:
+        for read_idx in range(3):
+            read_name = f"{sample_name}_c2c3_{read_idx}"
+            ref_start = J_C2.start - ANCHOR
+            intron1_len = J_C2.end - J_C2.start
+            intron2_len = J_C3.end - J_C3.start
+            exon1_bases = ANCHOR  # 25
+            exon2_bases = 2  # minimal middle exon
+            exon3_bases = READ_LENGTH - exon1_bases - exon2_bases  # 23
+            cigar = [(0, exon1_bases), (3, intron1_len), (0, exon2_bases), (3, intron2_len), (0, exon3_bases)]
+            reads.append(_make_aligned_read(header, read_name, ref_start, cigar))
+
+    # Create single-junction reads for all junctions
     for junction, count in junction_counts.items():
         for i in range(count):
             read_name = f"{sample_name}_{junction.start}_{junction.end}_{i}"

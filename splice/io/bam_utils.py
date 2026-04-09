@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from splicekit.utils.genomic import GenomicInterval, Junction, JunctionPair
+from splice.utils.genomic import GenomicInterval, Junction, JunctionPair
 
 if TYPE_CHECKING:
     import pysam
@@ -230,6 +230,11 @@ def extract_evidence_from_bam(
 ) -> Tuple[List[ReadEvidence], Dict]:
     """Extract evidence from all reads in a BAM file or region.
 
+    WARNING: This function loads ALL read evidence into memory. For large BAM
+    files (>10M reads), this will consume tens of GB of RAM. Use
+    extract_junction_stats_streaming() instead for production workloads.
+    This function is intended for small BAMs, testing, or debugging only.
+
     Iterates through reads, applies quality filters, and extracts evidence
     for each passing read. Collects statistics across all reads.
 
@@ -248,6 +253,13 @@ def extract_evidence_from_bam(
           - mean_mapq: Mean mapping quality across mapped reads
           - median_mapq: Median mapping quality across mapped reads
     """
+    import warnings
+    warnings.warn(
+        "extract_evidence_from_bam loads all reads into memory. "
+        "For large BAMs, use extract_junction_stats_streaming() instead.",
+        ResourceWarning,
+        stacklevel=2,
+    )
     evidence_list = []
     mapq_values = []
     total_reads = 0
@@ -347,3 +359,122 @@ def count_exon_body_reads(
             weighted_count += 1.0 / nh
 
     return raw_count, weighted_count
+
+
+def extract_junction_stats_streaming(
+    bam_path: str,
+    sample_idx: int,
+    junction_stats: Dict,
+    cooccurrence_counts: Dict,
+    n_samples: int,
+    min_anchor: int = 6,
+    min_mapq: int = 0,
+) -> Dict:
+    """Extract junction statistics from a BAM file in streaming mode.
+
+    Reads the BAM file one read at a time, extracts junctions from each read,
+    and immediately aggregates into the provided junction_stats and
+    cooccurrence_counts dicts. Never stores per-read objects in memory.
+
+    Memory usage is proportional to the number of unique junctions (~100K-500K),
+    not the number of reads (~100M+).
+
+    Args:
+        bam_path: Path to BAM file (must be indexed).
+        sample_idx: Index of this sample in the sample array.
+        junction_stats: Shared dict to accumulate into.
+            Maps Junction -> {sample_idx -> {counts, mapq_sum, mapq_sq_sum, nh_sum, n, max_anchor}}.
+        cooccurrence_counts: Shared dict to accumulate into.
+            Maps JunctionPair -> np.ndarray of shape (n_samples,).
+        n_samples: Total number of samples (for initializing arrays).
+        min_anchor: Minimum anchor length for valid junctions.
+        min_mapq: Minimum mapping quality to include read.
+
+    Returns:
+        Dict with BAM-level statistics (total_reads, mapped_reads, etc.).
+    """
+    total_reads = 0
+    mapped_reads = 0
+    junction_reads = 0
+    multi_mapped_reads = 0
+    mapq_sum = 0.0
+    mapq_count = 0
+
+    with pysam.AlignmentFile(bam_path, "rb") as bam:
+        for read in bam.fetch():
+            total_reads += 1
+
+            if read.is_unmapped:
+                continue
+
+            mapped_reads += 1
+            mapq_count += 1
+            mapq_sum += read.mapping_quality
+
+            if not _passes_quality_filters(read):
+                continue
+
+            if read.mapping_quality < min_mapq:
+                continue
+
+            # Extract junctions directly from CIGAR - no ReadEvidence object
+            junctions = _extract_junctions_from_cigar(read, min_anchor)
+            if not junctions:
+                continue
+
+            junction_reads += 1
+
+            nh = _get_nh_tag(read)
+            mapq = read.mapping_quality
+            if nh > 1:
+                multi_mapped_reads += 1
+
+            # Get exon blocks for anchor calculation
+            blocks = read.get_blocks()
+
+            # Aggregate per-junction stats directly
+            for i, junc in enumerate(junctions):
+                if junc not in junction_stats:
+                    junction_stats[junc] = {}
+                if sample_idx not in junction_stats[junc]:
+                    junction_stats[junc][sample_idx] = {
+                        "counts": 0,
+                        "mapq_sum": 0.0,
+                        "mapq_sq_sum": 0.0,
+                        "nh_sum": 0.0,
+                        "n": 0,
+                        "max_anchor": 0,
+                    }
+
+                s = junction_stats[junc][sample_idx]
+                s["counts"] += 1
+                s["mapq_sum"] += mapq
+                s["mapq_sq_sum"] += mapq * mapq
+                s["nh_sum"] += nh
+                s["n"] += 1
+
+                # Track max anchor from flanking blocks
+                if i < len(blocks):
+                    anchor = blocks[i][1] - blocks[i][0]
+                    s["max_anchor"] = max(s["max_anchor"], anchor)
+                if i + 1 < len(blocks):
+                    anchor = blocks[i + 1][1] - blocks[i + 1][0]
+                    s["max_anchor"] = max(s["max_anchor"], anchor)
+
+            # Aggregate co-occurrence for multi-junction reads
+            if len(junctions) >= 2:
+                for j1, j2 in combinations(junctions, 2):
+                    pair = JunctionPair(j1, j2)
+                    if pair not in cooccurrence_counts:
+                        cooccurrence_counts[pair] = np.zeros(n_samples, dtype=int)
+                    cooccurrence_counts[pair][sample_idx] += 1
+
+    stats = {
+        "total_reads": total_reads,
+        "mapped_reads": mapped_reads,
+        "junction_reads": junction_reads,
+        "multi_mapped_reads": multi_mapped_reads,
+        "mean_mapq": mapq_sum / mapq_count if mapq_count > 0 else 0.0,
+    }
+
+    return stats

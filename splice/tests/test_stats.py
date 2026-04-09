@@ -9,7 +9,7 @@ import unittest
 import numpy as np
 from scipy.stats import chi2
 
-from splicekit.utils.stats import (
+from splice.utils.stats import (
     benjamini_hochberg,
     beta_posterior_psi,
     dm_log_likelihood,

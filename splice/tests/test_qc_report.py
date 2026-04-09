@@ -10,12 +10,12 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.diagnostics import EventDiagnostic
-from splicekit.core.diff import DiffResult
-from splicekit.core.diff_het import HetResult
-from splicekit.core.nmd_classifier import NMDClassification
-from splicekit.io.qc_report import generate_qc_report
-from splicekit.utils.genomic import Junction
+from splice.core.diagnostics import EventDiagnostic
+from splice.core.diff import DiffResult
+from splice.core.diff_het import HetResult
+from splice.core.nmd_classifier import NMDClassification
+from splice.io.qc_report import generate_qc_report
+from splice.utils.genomic import Junction
 
 
 class TestGenerateQCReport(unittest.TestCase):

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from typing import List, Optional, Set
 
-from splicekit.core.cooccurrence import CooccurrenceGraph
-from splicekit.core.splicegraph import SplicingModule
-from splicekit.utils.genomic import Junction
+from splice.core.cooccurrence import CooccurrenceGraph
+from splice.core.splicegraph import SplicingModule
+from splice.utils.genomic import Junction
 
 
 def classify_event(
@@ -91,28 +91,26 @@ def classify_event(
 
 
 def _classify_se_or_complex(module: SplicingModule) -> str:
-    """Classify 3-junction modules as SE or Complex.
+    """Classify 3-junction module as SE or Complex.
 
-    SE topology: two junctions with same donor (or acceptor), third junction
-    shares an endpoint with one of them.
+    SE topology requires:
+    - Two inclusion junctions (inc_a, inc_b) flanking a cassette exon
+    - One skipping junction (skip) that bypasses the cassette exon
+    - skip spans from inc_a.start to inc_b.end
+    - inc_a.end <= inc_b.start (cassette exon lies between them)
     """
-    j1, j2, j3 = module.junctions[0], module.junctions[1], module.junctions[2]
+    juncs = sorted(module.junctions, key=lambda j: (j.start, j.end))
+    j1, j2, j3 = juncs[0], juncs[1], juncs[2]
 
-    # Check if any pair shares donor
-    if j1.donor == j2.donor and j3.donor != j1.donor:
-        return "SE"
-    if j1.donor == j3.donor and j2.donor != j1.donor:
-        return "SE"
-    if j2.donor == j3.donor and j1.donor != j2.donor:
-        return "SE"
-
-    # Check if any pair shares acceptor
-    if j1.acceptor == j2.acceptor and j3.acceptor != j1.acceptor:
-        return "SE"
-    if j1.acceptor == j3.acceptor and j2.acceptor != j1.acceptor:
-        return "SE"
-    if j2.acceptor == j3.acceptor and j1.acceptor != j2.acceptor:
-        return "SE"
+    for skip, inc_a, inc_b in [(j1, j2, j3), (j2, j1, j3), (j3, j1, j2)]:
+        # Sort inclusion junctions by position
+        if inc_a.start > inc_b.start:
+            inc_a, inc_b = inc_b, inc_a
+        # Skip junction spans from inc_a region to inc_b region
+        if skip.start == inc_a.start and skip.end == inc_b.end:
+            # Two inclusion junctions are adjacent (cassette exon between them)
+            if inc_a.end <= inc_b.start:
+                return "SE"
 
     return "Complex"
 

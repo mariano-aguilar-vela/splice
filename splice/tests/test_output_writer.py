@@ -10,15 +10,15 @@ import unittest
 
 import numpy as np
 
-from splicekit.core.diagnostics import EventDiagnostic
-from splicekit.core.diff import DiffResult
-from splicekit.core.nmd_classifier import NMDClassification
-from splicekit.io.output_writer import (
+from splice.core.diagnostics import EventDiagnostic
+from splice.core.diff import DiffResult
+from splice.core.nmd_classifier import NMDClassification
+from splice.io.output_writer import (
     write_junction_details_tsv,
     write_results_tsv,
     write_summary_tsv,
 )
-from splicekit.utils.genomic import Junction
+from splice.utils.genomic import Junction
 
 
 class TestWriteResultsTSV(unittest.TestCase):

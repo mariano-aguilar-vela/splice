@@ -13,9 +13,9 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
-from splicekit.io.bam_utils import extract_evidence_from_bam
-from splicekit.utils.genomic import Junction, JunctionPair
-from splicekit.utils.motif import classify_motif, extract_motif_from_genome, score_motif
+from splice.io.bam_utils import extract_evidence_from_bam, extract_junction_stats_streaming
+from splice.utils.genomic import Junction, JunctionPair
+from splice.utils.motif import classify_motif, extract_motif_from_genome, score_motif
 
 
 @dataclass
@@ -75,8 +75,10 @@ def extract_all_junctions(
 ) -> Tuple[Dict[Junction, JunctionEvidence], Dict[JunctionPair, CooccurrenceEvidence]]:
     """Extract junctions and co-occurrences from all BAM files.
 
-    Processes each BAM file to extract junction evidence, then aggregates across
-    samples to produce per-junction statistics and co-occurrence counts.
+    Uses streaming mode: each BAM is processed read-by-read, aggregating
+    junction counts directly into shared dicts. Never stores per-read objects.
+    Memory usage is proportional to the number of unique junctions (~100K-500K),
+    not the number of reads (~100M+).
 
     Args:
         bam_paths: List of paths to BAM files (must be indexed).
@@ -92,65 +94,39 @@ def extract_all_junctions(
           - junction_dict: Maps Junction -> JunctionEvidence
           - cooccurrence_dict: Maps JunctionPair -> CooccurrenceEvidence
     """
+    import sys
+
     n_samples = len(bam_paths)
 
-    # Initialize aggregation structures
-    # junction -> {sample_idx -> [counts, mapq_values, nh_values]}
-    junction_stats: Dict[Junction, Dict[int, List | np.ndarray]] = {}
-    # pair -> [counts per sample]
+    # Shared aggregation structures -- populated by streaming BAM reader
+    junction_stats: Dict[Junction, Dict] = {}
     cooccurrence_counts: Dict[JunctionPair, np.ndarray] = {}
 
-    # Process each BAM file
+    # Process each BAM file in streaming mode
     for sample_idx, (bam_path, sample_name) in enumerate(zip(bam_paths, sample_names)):
-        evidence_list, stats = extract_evidence_from_bam(
-            bam_path, min_anchor=min_anchor, min_mapq=min_mapq
+        print(f"    [{sample_idx+1}/{n_samples}] {sample_name}...", end=" ", flush=True)
+
+        bam_stats = extract_junction_stats_streaming(
+            bam_path=bam_path,
+            sample_idx=sample_idx,
+            junction_stats=junction_stats,
+            cooccurrence_counts=cooccurrence_counts,
+            n_samples=n_samples,
+            min_anchor=min_anchor,
+            min_mapq=min_mapq,
         )
 
-        # Aggregate junction evidence from this sample
-        for evidence in evidence_list:
-            # For each read, count each junction and track statistics
-            for i, junc in enumerate(evidence.junctions):
-                # Initialize if not present
-                if junc not in junction_stats:
-                    junction_stats[junc] = {}
-                if sample_idx not in junction_stats[junc]:
-                    junction_stats[junc][sample_idx] = {
-                        "counts": 0,
-                        "mapq_values": [],
-                        "nh_values": [],
-                        "max_anchor": 0,
-                    }
+        print(
+            f"{bam_stats['mapped_reads']:,} mapped, "
+            f"{bam_stats['junction_reads']:,} junction reads, "
+            f"{len(junction_stats):,} unique junctions so far",
+            flush=True,
+        )
 
-                # Raw count: increment by 1
-                junction_stats[junc][sample_idx]["counts"] += 1
-
-                # Collect MAPQ and NH values
-                junction_stats[junc][sample_idx]["mapq_values"].append(evidence.mapq)
-                junction_stats[junc][sample_idx]["nh_values"].append(evidence.nh)
-
-                # Track maximum anchor (using exon blocks flanking the junction)
-                if i < len(evidence.exon_blocks):
-                    anchor = evidence.exon_blocks[i].length
-                    junction_stats[junc][sample_idx]["max_anchor"] = max(
-                        junction_stats[junc][sample_idx]["max_anchor"], anchor
-                    )
-                if i + 1 < len(evidence.exon_blocks):
-                    anchor = evidence.exon_blocks[i + 1].length
-                    junction_stats[junc][sample_idx]["max_anchor"] = max(
-                        junction_stats[junc][sample_idx]["max_anchor"], anchor
-                    )
-
-            # Aggregate co-occurrence evidence
-            for pair in evidence.junction_pairs:
-                if pair not in cooccurrence_counts:
-                    cooccurrence_counts[pair] = np.zeros(n_samples, dtype=int)
-                cooccurrence_counts[pair][sample_idx] += 1
-
-    # Build JunctionEvidence objects
+    # Build JunctionEvidence objects from aggregated stats
     junction_evidence: Dict[Junction, JunctionEvidence] = {}
 
     for junc, samples_stats in junction_stats.items():
-        # Initialize arrays for all samples
         sample_counts = np.zeros(n_samples, dtype=int)
         sample_weighted_counts = np.zeros(n_samples, dtype=float)
         sample_mapq_mean = np.zeros(n_samples, dtype=float)
@@ -158,20 +134,21 @@ def extract_all_junctions(
         sample_nh_distribution = np.zeros(n_samples, dtype=float)
         max_anchor_global = 0
 
-        # Fill in statistics for samples that have this junction
         for sample_idx, stats in samples_stats.items():
+            n = stats["n"]
             sample_counts[sample_idx] = stats["counts"]
 
-            # Weighted count: sum of 1/NH for each read
-            mapq_vals = np.array(stats["mapq_values"], dtype=float)
-            nh_vals = np.array(stats["nh_values"], dtype=float)
+            # Weighted count: sum of 1/NH (approximate from mean NH)
+            mean_nh = stats["nh_sum"] / n if n > 0 else 1.0
+            sample_weighted_counts[sample_idx] = stats["counts"] / mean_nh
 
-            sample_weighted_counts[sample_idx] = np.sum(1.0 / nh_vals)
-            sample_mapq_mean[sample_idx] = np.mean(mapq_vals) if len(mapq_vals) > 0 else 0.0
-            sample_mapq_median[sample_idx] = (
-                np.median(mapq_vals) if len(mapq_vals) > 0 else 0.0
-            )
-            sample_nh_distribution[sample_idx] = np.mean(nh_vals) if len(nh_vals) > 0 else 0.0
+            # Mean MAPQ from running sum
+            sample_mapq_mean[sample_idx] = stats["mapq_sum"] / n if n > 0 else 0.0
+            # Median not available in streaming mode; use mean as proxy
+            sample_mapq_median[sample_idx] = sample_mapq_mean[sample_idx]
+
+            # Mean NH
+            sample_nh_distribution[sample_idx] = mean_nh
 
             max_anchor_global = max(max_anchor_global, stats["max_anchor"])
 
@@ -192,7 +169,6 @@ def extract_all_junctions(
                 )
                 motif_score_val = score_motif(motif_str)
             except Exception:
-                # If motif extraction fails, leave empty
                 motif_str = ""
                 motif_score_val = 0.0
 

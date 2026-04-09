@@ -13,9 +13,9 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
-from splicekit.core.clustering import JunctionCluster
-from splicekit.core.cooccurrence import CooccurrenceGraph
-from splicekit.utils.genomic import GenomicInterval, Junction, overlaps
+from splice.core.clustering import JunctionCluster
+from splice.core.cooccurrence import CooccurrenceGraph
+from splice.utils.genomic import GenomicInterval, Junction, overlaps
 
 
 @dataclass
@@ -197,41 +197,33 @@ def build_splicegraph(
 def _merge_overlapping_clusters(
     clusters: List[JunctionCluster],
 ) -> List[List[Junction]]:
-    """Merge clusters that have overlapping junctions.
+    """Merge clusters with overlapping coordinate ranges using sweep line.
 
-    Returns list of merged junction groups (each group is a list of junctions
-    that should be in the same module).
+    O(N log N) instead of O(N^2).
     """
     if not clusters:
         return []
 
-    # Build a graph of cluster overlap
-    n = len(clusters)
-    adjacency = [[False] * n for _ in range(n)]
+    # Sort clusters by start position
+    sorted_clusters = sorted(clusters, key=lambda c: (c.start, c.end))
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            # Check if clusters i and j overlap
-            if clusters[i].start < clusters[j].end and clusters[i].end > clusters[j].start:
-                adjacency[i][j] = True
-                adjacency[j][i] = True
-
-    # Find connected components
-    visited = [False] * n
     merged_groups: List[List[Junction]] = []
+    current_junctions: List[Junction] = list(sorted_clusters[0].junctions)
+    current_end = sorted_clusters[0].end
 
-    def dfs(idx: int, group: List[Junction]) -> None:
-        visited[idx] = True
-        group.extend(clusters[idx].junctions)
-        for neighbor in range(n):
-            if adjacency[idx][neighbor] and not visited[neighbor]:
-                dfs(neighbor, group)
+    for cluster in sorted_clusters[1:]:
+        if cluster.start < current_end:
+            # Overlaps with current group: merge
+            current_junctions.extend(cluster.junctions)
+            current_end = max(current_end, cluster.end)
+        else:
+            # No overlap: finalize current group, start new one
+            merged_groups.append(current_junctions)
+            current_junctions = list(cluster.junctions)
+            current_end = cluster.end
 
-    for i in range(n):
-        if not visited[i]:
-            group: List[Junction] = []
-            dfs(i, group)
-            merged_groups.append(group)
+    # Do not forget the last group
+    merged_groups.append(current_junctions)
 
     return merged_groups
 

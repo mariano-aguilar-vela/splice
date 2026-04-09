@@ -12,12 +12,12 @@ from typing import List
 
 import numpy as np
 
-from splicekit.core.bootstrap import (
+from splice.core.bootstrap import (
     bootstrap_confidence_intervals,
     bootstrap_junction_counts,
     bootstrap_psi,
 )
-from splicekit.core.evidence import ModuleEvidence
+from splice.core.evidence import ModuleEvidence
 
 
 @dataclass(frozen=True, slots=True)
