@@ -179,7 +179,7 @@ def write_junction_details_tsv(
                 str(evidence.get("is_annotated", False)),
                 evidence.get("motif", "NA"),
                 f"{evidence.get('motif_score', np.nan):.4f}",
-                f"{confidence:.4f}",
+                f"{confidence.composite_score if hasattr(confidence, 'composite_score') else float(confidence):.4f}",
                 nmd_class_str,
                 nmd_confidence_str,
                 n_productive_str,

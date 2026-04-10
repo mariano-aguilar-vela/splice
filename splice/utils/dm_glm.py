@@ -53,11 +53,13 @@ def dm_log_likelihood(counts: np.ndarray, alpha: np.ndarray) -> float:
     Returns:
         Log-likelihood scalar.
     """
+    alpha = np.maximum(alpha, 1e-10)
     sum_alpha = np.sum(alpha)
     sum_counts = np.sum(counts)
 
-    ll = gammaln(sum_alpha) - gammaln(sum_alpha + sum_counts)
-    ll += np.sum(gammaln(alpha + counts) - gammaln(alpha))
+    with np.errstate(invalid='ignore'):
+        ll = gammaln(sum_alpha) - gammaln(sum_alpha + sum_counts)
+        ll += np.sum(gammaln(alpha + counts) - gammaln(alpha))
 
     return ll
 

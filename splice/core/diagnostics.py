@@ -172,6 +172,7 @@ def compute_diagnostics(
             means = np.mean(bootstrap_psi, axis=0)
             stds = np.std(bootstrap_psi, axis=0, ddof=1)
             cvs = np.where(means > 0.01, stds / means, 0)
+            cvs = np.nan_to_num(cvs, nan=0.0, posinf=0.0, neginf=0.0)
             cvs = cvs[~np.isnan(cvs)]
             bootstrap_cv = np.median(cvs) if len(cvs) > 0 else 0.0
         else:
