@@ -1,15 +1,29 @@
 """
 SPLICE: Splicegraph Probabilistic Learning for Isoform Change Estimation
 
-Splicegraph Probabilistic Learning for Isoform Change Estimation. A comprehensive platform
-for discovery and analysis of differential splicing events in RNA-seq data.
-Combines annotation-free junction discovery, multi-way statistical testing,
-covariate regression, heterogeneity detection, and functional annotation into
-a unified framework.
+A comprehensive platform for discovery and analysis of differential splicing
+events in RNA-seq data. Combines annotation-free junction discovery, multi-way
+statistical testing, covariate regression, heterogeneity detection, and
+functional annotation into a unified framework.
 """
 
 from setuptools import setup, find_packages
+from setuptools.command.install import install
 from pathlib import Path
+
+
+class PostInstallCommand(install):
+    """Post-installation: attempt to build the Rust BAM reader extension."""
+
+    def run(self):
+        install.run(self)
+        try:
+            from splice.install_rust import try_build_rust_extension
+            try_build_rust_extension()
+        except Exception:
+            # Swallow errors so pip install always succeeds
+            pass
+
 
 # Read README for long description
 readme_file = Path(__file__).parent / "README.md"
@@ -83,6 +97,12 @@ setup(
             "sphinx>=5.0",
             "sphinx-rtd-theme>=1.0",
         ],
+        "rust": [
+            "maturin>=1.0",
+        ],
+    },
+    cmdclass={
+        "install": PostInstallCommand,
     },
     entry_points={
         "console_scripts": [

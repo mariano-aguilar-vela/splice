@@ -706,5 +706,21 @@ def qc(results, diagnostics, output):
     click.echo("\nQC report generated successfully.")
 
 
+@main.command("build-rust")
+def build_rust():
+    """Build the Rust-accelerated BAM reader for faster performance.
+
+    Installs the Rust toolchain (if needed), compiles the native BAM reader,
+    and verifies it works. If any step fails, SPLICE continues to work using
+    the pure Python BAM reader with identical results.
+
+    Example usage:
+
+        splice build-rust
+    """
+    from splice.install_rust import try_build_rust_extension
+    try_build_rust_extension()
+
+
 if __name__ == "__main__":
     main()
