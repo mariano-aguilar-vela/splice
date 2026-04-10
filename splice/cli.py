@@ -801,6 +801,50 @@ def compare(splice_dir, rmats_dir, majiq_dir, suppa2_dir, output_dir):
                        f"shared={s['shared_with_splice']}, Jaccard={s['jaccard']:.3f}")
 
 
+@main.command("sashimi")
+@click.option("--results", "-r", required=True, type=click.Path(exists=True),
+              help="Path to splice_results.tsv")
+@click.option("--bam-group1", multiple=True, required=True, type=click.Path(exists=True),
+              help="BAM files for group 1 (specify once per file)")
+@click.option("--bam-group2", multiple=True, required=True, type=click.Path(exists=True),
+              help="BAM files for group 2 (specify once per file)")
+@click.option("--gtf", "-g", required=True, type=click.Path(exists=True),
+              help="GTF annotation file")
+@click.option("--output-dir", "-o", required=True, type=click.Path(),
+              help="Output directory for sashimi plots")
+@click.option("--n-top", type=int, default=20,
+              help="Number of top significant events to plot")
+@click.option("--group1-name", default="Group 1", help="Label for group 1")
+@click.option("--group2-name", default="Group 2", help="Label for group 2")
+def sashimi(results, bam_group1, bam_group2, gtf, output_dir, n_top,
+            group1_name, group2_name):
+    """Generate sashimi plots for top significant splicing events.
+
+    Creates publication-ready multi-panel sashimi plots showing per-base
+    coverage, gene structure, and junction usage between two sample groups.
+    """
+    from splice.visualization.sashimi_plot import generate_top_sashimi_plots
+
+    click.echo(f"SPLICE: Generating sashimi plots for top {n_top} events")
+    click.echo(f"  Results: {results}")
+    click.echo(f"  Group 1: {len(bam_group1)} BAMs ({group1_name})")
+    click.echo(f"  Group 2: {len(bam_group2)} BAMs ({group2_name})")
+    click.echo(f"  Output: {output_dir}")
+
+    generate_top_sashimi_plots(
+        splice_results_path=results,
+        bam_paths_group1=list(bam_group1),
+        bam_paths_group2=list(bam_group2),
+        gtf_path=gtf,
+        output_dir=output_dir,
+        n_top=n_top,
+        group1_name=group1_name,
+        group2_name=group2_name,
+    )
+
+    click.echo(f"\nSashimi plots written to {output_dir}/")
+
+
 @main.command("build-rust")
 def build_rust():
     """Build the Rust-accelerated BAM reader for faster performance.
