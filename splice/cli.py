@@ -752,6 +752,55 @@ def qc(results, diagnostics, output):
     click.echo("\nQC report generated successfully.")
 
 
+@main.command("compare")
+@click.option("--splice-dir", required=True, type=click.Path(exists=True),
+              help="Directory containing splice_results.tsv")
+@click.option("--rmats-dir", default=None, type=click.Path(exists=True),
+              help="rMATS output directory (with .MATS.JC.txt files)")
+@click.option("--majiq-dir", default=None, type=click.Path(exists=True),
+              help="MAJIQ output directory (with deltapsi.tsv)")
+@click.option("--suppa2-dir", default=None, type=click.Path(exists=True),
+              help="SUPPA2 output directory (with .dpsi files)")
+@click.option("--output-dir", "-o", required=True, type=click.Path(),
+              help="Output directory for comparison report")
+def compare(splice_dir, rmats_dir, majiq_dir, suppa2_dir, output_dir):
+    """Compare SPLICE results against rMATS, MAJIQ, and SUPPA2.
+
+    Generates concordance statistics and visualizations:
+    - concordance_summary.tsv: pairwise overlap statistics
+    - venn_diagram.svg: gene-level overlap between tools
+    - upset_plot.svg: intersection sizes
+    - delta_psi_correlation.svg: scatter plots
+    - concordance_heatmap.svg: pairwise Jaccard similarity
+    """
+    from splice.analysis.cross_tool_comparison import generate_comparison_report
+
+    click.echo("SPLICE: Cross-tool comparison")
+    click.echo(f"  SPLICE: {splice_dir}")
+    if rmats_dir:
+        click.echo(f"  rMATS: {rmats_dir}")
+    if majiq_dir:
+        click.echo(f"  MAJIQ: {majiq_dir}")
+    if suppa2_dir:
+        click.echo(f"  SUPPA2: {suppa2_dir}")
+
+    stats = generate_comparison_report(
+        splice_dir=splice_dir,
+        rmats_dir=rmats_dir,
+        majiq_dir=majiq_dir,
+        suppa2_dir=suppa2_dir,
+        output_dir=output_dir,
+    )
+
+    click.echo(f"\nReport written to {output_dir}/")
+    click.echo(f"  SPLICE significant: {stats.get('splice_n_significant', 0)}")
+    for tool in ("rMATS", "MAJIQ", "SUPPA2"):
+        if tool in stats:
+            s = stats[tool]
+            click.echo(f"  {tool}: n={s['n_significant']}, "
+                       f"shared={s['shared_with_splice']}, Jaccard={s['jaccard']:.3f}")
+
+
 @main.command("build-rust")
 def build_rust():
     """Build the Rust-accelerated BAM reader for faster performance.
