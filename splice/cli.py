@@ -285,7 +285,21 @@ def run(
     click.echo(f"  Group 1 ({len(g1_indices)} samples): {', '.join(names[i] for i in g1_indices)}")
     click.echo(f"  Group 2 ({len(g2_indices)} samples): {', '.join(names[i] for i in g2_indices)}")
     click.echo(f"Output directory: {output_dir}")
-    click.echo(f"Threads: {threads}")
+
+    # Rust status
+    try:
+        from splice._rust_bam import RUST_AVAILABLE
+    except ImportError:
+        RUST_AVAILABLE = False
+
+    if RUST_AVAILABLE:
+        click.echo("BAM reader: Rust-accelerated")
+    else:
+        click.echo("BAM reader: Python (slow mode)")
+        click.echo("  Run 'splice build-rust' to enable Rust for 10x faster analysis.")
+        click.echo("  Rust is required for production use. Install with: splice build-rust")
+
+    click.echo(f"Parallelism: {threads} chromosome workers")
     click.echo("")
 
     # ── Step 1: Parse GTF ──────────────────────────────────────────────────────

@@ -4,26 +4,27 @@
 
 **Version:** 1.0.0
 **License:** MIT
-**Language:** Python >= 3.10, with optional Rust acceleration
+**Language:** Python >= 3.10 + Rust (required for production)
 
 ---
 
 ## Key Features
 
+- **Chromosome-level parallelism** processes all chromosomes in parallel for major speedup
+- **Rust-accelerated BAM reader** provides 10-50x faster junction extraction
 - **Annotation-free junction discovery** using bipartite-graph union-find clustering (O(N) time)
-- **Chromosome-level parallelism** -- processes all chromosomes simultaneously for ~3-4x speedup
-- **Rust-accelerated BAM reader** -- optional compiled extension for 10-50x faster junction extraction
 - **Dirichlet-multinomial GLM** with null-refit strategy for proper FDR calibration
-- **Vectorized bootstrap** PSI quantification using numpy broadcasting
+- **Vectorized bootstrap** PSI quantification
 - **Covariate and heterogeneity support** (batch correction, per-patient effects)
 - **NMD/PTC classification** using transcript-based analysis
-- **Cross-tool export** (rMATS, LeafCutter, MAJIQ, BED, GTF formats)
+- **Cross-tool comparison** against rMATS, MAJIQ, SUPPA2
+- **Publication-quality outputs**: Excel workbooks, PDF reports, sashimi plots
 
 ---
 
 ## Installation
 
-### Basic Install (Python only)
+### Step 1: Python package
 
 ```bash
 git clone https://github.com/mariano-aguilar-vela/splice.git
@@ -31,17 +32,24 @@ cd splice
 pip install -e .
 ```
 
-This installs SPLICE with the pure Python BAM reader. All features work, but junction extraction from large BAM files will be slower.
-
-### Enable Rust Acceleration (recommended)
-
-The Rust BAM reader provides 10-50x faster junction extraction. To enable it:
+### Step 2: Rust acceleration (required for production)
 
 ```bash
-# Option 1: Automatic (handles Rust installation if needed)
 splice build-rust
+```
 
-# Option 2: Manual
+This automatically installs the Rust toolchain (if not present), installs maturin, and compiles the native BAM reader. It requires a C compiler, which is already present in any environment where pysam is installed.
+
+Verify:
+```bash
+python -c "from splice._rust_bam import RUST_AVAILABLE; print(f'Rust: {RUST_AVAILABLE}')"
+```
+
+If Rust is not compiled, SPLICE falls back to a pure Python BAM reader automatically. Results are identical but ~10x slower. **Production runs should always use Rust.**
+
+### Manual Rust install (alternative)
+
+```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source $HOME/.cargo/env
 pip install maturin
@@ -49,40 +57,29 @@ cd /path/to/splice
 maturin develop --release
 ```
 
-Verify:
-```bash
-python -c "from splice._rust_bam import RUST_AVAILABLE; print(f'Rust: {RUST_AVAILABLE}')"
-```
-
-If Rust is not compiled, SPLICE uses the Python BAM reader automatically with identical results. No configuration needed.
-
-### From PyPI (future)
-
-```bash
-pip install splice
-```
-
-Pre-compiled wheels will include the Rust extension for supported platforms.
-
 ---
 
 ## Performance
 
-Benchmarks on 6 BAM files (~170M reads each, human RNA-seq):
+Benchmarks on 6 human RNA-seq BAMs (~170M reads each):
 
-| Configuration | Junction Extraction | Full Pipeline | Notes |
-|---------------|-------------------|---------------|-------|
-| Python only, sequential | ~4 hours | ~5 hours | Default if Rust not compiled |
-| Python + Rust | ~30 min | ~1.5 hours | `splice build-rust` |
-| Python + Rust + 8 threads | ~5 min | ~30 min | `-t 8` (recommended) |
+| Configuration | Junction Extraction | Full Pipeline |
+|---------------|---------------------|---------------|
+| Python, sequential | ~4 hours | ~5 hours |
+| Python, 8-thread chromosome parallel | ~45 min | ~1.5 hours |
+| **Rust, 8-thread chromosome parallel** | **~5 min** | **~25 min** |
 
-Memory usage: ~2-4 GB per worker thread. With 8 threads: ~16-32 GB total.
+### Why it's fast
+
+**Chromosome-level parallelism**: SPLICE processes each chromosome as an independent pipeline stage. Splicing events on different chromosomes never interact, so the results are mathematically identical to sequential processing while running ~8x faster on 8 cores. Global FDR correction is applied after merging per-chromosome results.
+
+**Rust BAM reader**: Junction extraction is the bottleneck step. The Rust implementation reads BAMs via rust-htslib with zero Python interpreter overhead per read, producing ~10-50x speedup over pure Python.
 
 ---
 
 ## Quick Start
 
-### Basic Differential Splicing Analysis
+### Complete differential splicing analysis
 
 ```bash
 splice run \
@@ -95,57 +92,127 @@ splice run \
   --group2 3,4,5 \
   --output-dir ./results \
   --threads 8 \
-  --n-bootstraps 100
+  --n-bootstraps 100 \
+  --export-rmats --export-bed
 ```
 
-### Pipeline Architecture (10 steps)
+On startup you will see:
+```
+SPLICE: Splicegraph Probabilistic Learning for Isoform Change Estimation
+Input BAMs: 6 samples
+  Group 1 (3 samples): S1, S2, S3
+  Group 2 (3 samples): S4, S5, S6
+Output directory: ./results
+BAM reader: Rust-accelerated
+Parallelism: 8 chromosome workers
+```
+
+### Pipeline stages
 
 ```
-Step 1:  Parse GTF annotation (sequential)
+Step 1:  Parse GTF annotation
 Step 2:  Detect chromosomes in BAM files
 Step 3:  Process chromosomes in parallel:
-           - Extract junctions (Rust or Python)
+           - Extract junctions (Rust)
            - Score junction confidence
            - Pre-filter low-count junctions
-           - Cluster with union-find (O(N) time)
+           - Cluster junctions (union-find)
            - Build splicegraph and modules
            - Build evidence matrices
            - Quantify PSI with bootstrap CIs
            - Test differential splicing (DM-GLM + null-refit)
            - Heterogeneity testing
-           - Event classification and diagnostics
+           - Event classification
 Step 4:  Merge chromosome results + global FDR correction
-Step 5:  NMD/PTC classification (if genome provided)
+Step 5:  NMD/PTC classification
 Step 6:  Write results table
 Step 7:  Write junction details
 Step 8:  Write summary
 Step 9:  Generate QC report (HTML)
-Step 10: Export formats (rMATS, LeafCutter, BED)
+Step 10: Export formats (rMATS, BED, XLSX, PDF)
 ```
 
-Steps 3 processes all chromosomes simultaneously using `--threads` workers. Each chromosome runs the full analysis pipeline independently, then results are merged with genome-wide FDR correction.
+---
 
-### Analysis with Covariates
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `splice run` | Full differential splicing pipeline |
+| `splice quantify` | PSI quantification only (single group) |
+| `splice annotate` | Add NMD classification to existing results |
+| `splice export` | Convert results to other tool formats |
+| `splice qc` | Generate QC report from existing results |
+| `splice compare` | Cross-tool comparison (rMATS/MAJIQ/SUPPA2) |
+| `splice sashimi` | Generate sashimi plots for top events |
+| `splice build-rust` | Build/install the Rust BAM reader |
+
+### `splice run` -- Full pipeline
+
+**Required:**
+- `-b, --bam` *(multiple)* -- Input BAM file(s). Specify once per file: `-b a.bam -b b.bam`
+- `-g, --gtf` -- Genome annotation GTF file
+- `--group1` -- Comma-separated sample indices for group 1 (0-indexed)
+- `--group2` -- Comma-separated sample indices for group 2 (0-indexed)
+- `-o, --output-dir` -- Output directory
+
+**Key parameters:**
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-t, --threads` | 1 | Number of chromosome workers (set to 8 for full speed) |
+| `--n-bootstraps` | 30 | Bootstrap replicates for PSI confidence intervals (use 100 for publication) |
+| `--min-cluster-reads` | 30 | Minimum total reads per junction before clustering |
+| `--max-intron-length` | 100,000 | Maximum intron length for clustering |
+| `--min-anchor` | 6 | Minimum anchor length on each side of junction |
+| `--min-mapq` | 0 | Minimum mapping quality |
+
+**Feature toggles:**
+- `--no-novel` -- Disable de novo junction discovery
+- `--no-nmd` -- Skip NMD classification
+- `--no-het` -- Skip heterogeneity testing
+- `--no-exon-body` -- Skip exon body counting
+
+**Export formats:**
+- `--export-rmats` -- rMATS-compatible TSV
+- `--export-leafcutter` -- LeafCutter format
+- `--export-bed` -- BED for genome browser
+- `--export-xlsx` -- Multi-sheet Excel workbook
+- `--export-pdf` -- PDF report with figures
+
+**Advanced:**
+- `-f, --genome` -- Genome FASTA (enables NMD and motif scoring)
+- `-n, --sample-names` *(multiple)* -- Sample names
+- `--covariates` -- TSV with sample covariates for batch correction
+- `--checkpoint-dir` -- Enable resumable checkpointing
+
+### `splice compare` -- Cross-tool comparison
 
 ```bash
-splice run \
-  -b control_1.bam -b control_2.bam -b control_3.bam \
-  -b case_1.bam -b case_2.bam -b case_3.bam \
-  --sample-names C1 C2 C3 E1 E2 E3 \
-  --gtf genes.gtf \
-  --genome hg38.fa \
-  --group1 0,1,2 \
-  --group2 3,4,5 \
-  --covariates covariates.tsv \
-  --output-dir ./results \
-  --threads 8 \
-  --n-bootstraps 100 \
-  --export-rmats \
-  --export-leafcutter \
-  --checkpoint-dir ./checkpoints
+splice compare \
+  --splice-dir ./results \
+  --rmats-dir ./rmats_out \
+  --majiq-dir ./majiq_out \
+  --suppa2-dir ./suppa2_out \
+  --output-dir ./comparison
 ```
 
-### Other Commands
+Produces concordance statistics, Venn diagram, UpSet plot, delta-PSI correlation plots, and pairwise Jaccard heatmap.
+
+### `splice sashimi` -- Sashimi plots
+
+```bash
+splice sashimi \
+  --results ./results/splice_results.tsv \
+  --bam-group1 c1.bam -bam-group1 c2.bam -bam-group1 c3.bam \
+  --bam-group2 t1.bam -bam-group2 t2.bam -bam-group2 t3.bam \
+  --gtf genes.gtf \
+  --output-dir ./sashimi \
+  --n-top 20
+```
+
+Generates multi-panel sashimi plots for the top 20 significant events, saved as both SVG and 300 DPI PNG.
+
+### Other commands
 
 ```bash
 # Quantify PSI without differential testing
@@ -159,86 +226,58 @@ splice export --results results.tsv --format rmats --format bed -o ./exports
 
 # Generate QC report
 splice qc --results results.tsv --output report.html
-
-# Build Rust extension for faster BAM reading
-splice build-rust
 ```
-
----
-
-## CLI Reference
-
-### `splice run` -- Full Differential Splicing Pipeline
-
-**Required:**
-- `-b, --bam` *(multiple)* -- Input BAM file(s), specify once per file: `-b a.bam -b b.bam`
-- `-g, --gtf` -- Genome annotation GTF file
-- `--group1` -- Comma-separated sample indices for group 1 (0-indexed)
-- `--group2` -- Comma-separated sample indices for group 2 (0-indexed)
-- `-o, --output-dir` -- Output directory
-
-**Optional:**
-- `-f, --genome` -- Genome FASTA (enables NMD classification and motif scoring)
-- `-n, --sample-names` *(multiple)* -- Sample names (derived from BAM filenames if omitted)
-- `--covariates` -- TSV file with sample covariates
-- `-l, --read-length` -- Read length (auto-detected if omitted)
-- `--min-anchor` -- Minimum anchor length (default: 6)
-- `--min-mapq` -- Minimum mapping quality (default: 0)
-- `--min-cluster-reads` -- Minimum total reads per cluster (default: 30)
-- `--max-intron-length` -- Maximum intron length (default: 100,000)
-- `--n-bootstraps` -- Bootstrap replicates for PSI CIs (default: 30)
-- `-t, --threads` -- Worker threads (default: 1)
-- `--no-novel` -- Disable de novo junction discovery
-- `--no-nmd` -- Skip NMD classification
-- `--no-het` -- Skip heterogeneity testing
-- `--no-exon-body` -- Skip exon body counting
-- `--export-leafcutter` -- Export LeafCutter format
-- `--export-rmats` -- Export rMATS format
-- `--export-bed` -- Export BED format
-- `--checkpoint-dir` -- Enable resumable checkpointing
 
 ---
 
 ## Output Files
 
-### `splice_results.tsv`
+After `splice run`, the output directory contains:
 
-One row per splicing module:
-- `gene_id`, `gene_name`, `chrom`, `strand`
-- `module_id` -- Unique module identifier
+| File | Description |
+|------|-------------|
+| **`splice_results.tsv`** | Main results: one row per splicing module with gene info, event type, p-value, FDR, delta-PSI, PSI per group for the event-defining junction, confidence tier, convergence diagnostics |
+| **`splice_junction_details.tsv`** | Per-junction details: coordinates, annotation status, motif score, confidence, per-sample read counts |
+| **`splice_summary.tsv`** | Summary statistics: event type counts, significance counts, convergence success rates |
+| **`splice_qc_report.html`** | Interactive HTML QC report with volcano plot, event distributions, diagnostic charts |
+| `splice_significant.bed` | BED file with significant junctions (if `--export-bed`) |
+| `splice_rmats.tsv` | rMATS-compatible format (if `--export-rmats`) |
+| `splice_leafcutter.tsv` | LeafCutter format (if `--export-leafcutter`) |
+| `splice_results.xlsx` | Multi-sheet Excel workbook (if `--export-xlsx`) |
+| `splice_report.pdf` | PDF report with figures (if `--export-pdf`) |
+| `figures/` | Individual SVG figures from PDF report |
+| `checkpoints/` | Resumable pipeline state (if `--checkpoint-dir`) |
+
+### `splice_results.tsv` columns
+
+- `module_id`, `gene_id`, `gene_name`, `chrom`, `strand`
 - `event_type` -- SE, A3SS, A5SS, MXE, RI, Complex
-- `p_value`, `fdr` -- Raw and FDR-corrected p-values
-- `delta_psi` -- PSI difference between groups
-- Per-sample PSI values and confidence intervals
-
-### `splice_junction_details.tsv`
-
-One row per junction: coordinates, annotation status, motif score, per-sample counts, confidence.
-
-### `splice_summary.tsv`
-
-Summary statistics: event type counts, significance thresholds, coverage metrics.
-
-### `splice_qc_report.html`
-
-Interactive HTML report with volcano plots, clustering dendrograms, event type distributions, and diagnostic metrics.
+- `n_junctions` -- junctions in this module
+- `max_abs_delta_psi` -- max absolute effect size
+- `psi_group1_max_effect_junction`, `psi_group2_max_effect_junction` -- PSI of the event-defining junction
+- `p_value`, `fdr` -- raw and FDR-corrected p-values (global correction across all chromosomes)
+- `confidence_tier` -- HIGH/MEDIUM/LOW based on coverage, convergence, and signal
+- `null_converged`, `full_converged`, `null_refit_used` -- DM-GLM diagnostics
+- `mean_mapq`, `frac_high_mapq`, `mean_junction_confidence`, `bootstrap_cv`
+- `has_novel_junctions`, `has_convergence_issue`, `reason`
 
 ---
 
-## Input File Requirements
+## Input Requirements
 
-### BAM Files
+### BAM files
 - Coordinate-sorted (`samtools sort`)
 - Indexed (`samtools index`)
 - STAR aligner recommended (junctions from CIGAR N operations)
-- Multi-mapped reads weighted by 1/NH tag
+- Multi-mapped reads weighted by 1/NH tag if present
 
-### GTF Files
-- Standard GTF format with `gene_id` and `transcript_id` attributes
+### GTF file
+- Standard GTF format
+- Must include `gene_id`, `transcript_id` attributes
 - `exon` features required
 - Strand information required
 
-### Covariates File (TSV)
+### Covariates file (optional TSV)
 ```
 sample  batch   age     sex
 S1      batch1  65      M
@@ -250,28 +289,26 @@ S3      batch2  68      M
 
 ## Troubleshooting
 
+### "BAM reader: Python (slow mode)" warning
+- Run `splice build-rust` to enable the Rust reader
+- If that fails, check you have a C compiler (try `conda install gxx_linux-64`)
+- SPLICE still works in Python mode, just slower
+
 ### "No junctions detected"
-- Verify BAM is sorted and indexed
-- Try `--min-anchor 4` or `--min-cluster-reads 0`
+- Verify BAMs are coordinate-sorted and indexed
+- Try `--min-anchor 4` and `--min-cluster-reads 10`
 
-### "All PSI values are 0 or 1"
-- Normal for single-isoform genes
-- Check per_junction_details.tsv for coverage
-
-### "FDR-corrected p-values are all 1.0"
+### "All FDR = 1.0"
 - Insufficient signal or too few replicates (minimum 3 per group)
-- Try relaxing `--min-cluster-reads 10`
+- Check `splice_summary.tsv` for coverage metrics
 
-### Rust build fails
-- Run `splice build-rust` and check the error output
-- Common fix: `conda install -c conda-forge zlib bzip2 xz libcurl`
-- SPLICE works identically without Rust, just slower
+### "Rust build fails: cannot find stddef.h"
+- Load a newer GCC: `module load GCC/14.2.0` (HPC systems)
+- Or install: `conda install -c conda-forge gcc gxx`
 
 ---
 
 ## Citation
-
-If you use SPLICE in published research, please cite:
 
 ```
 SPLICE: Splicegraph Probabilistic Learning for Isoform Change Estimation.
