@@ -158,8 +158,11 @@ def write_junction_details_tsv(
             nmd_class_str = (
                 nmd_class.classification if nmd_class else "NA"
             )
+            import math
             nmd_confidence_str = (
-                f"{nmd_class.confidence:.4f}" if nmd_class else "NA"
+                f"{nmd_class.confidence:.4f}"
+                if nmd_class and not math.isnan(nmd_class.confidence)
+                else "NA"
             )
             n_productive_str = (
                 str(nmd_class.n_productive_paths) if nmd_class else "NA"

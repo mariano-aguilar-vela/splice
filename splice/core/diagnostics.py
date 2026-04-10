@@ -155,13 +155,13 @@ def compute_diagnostics(
             np.min(confidence_scores) if len(confidence_scores) > 0 else 0.0
         )
         frac_annotated = (
-            np.sum(annotated_flags) / len(annotated_flags)
+            float(np.sum(annotated_flags)) / len(annotated_flags)
             if len(annotated_flags) > 0
             else 0.0
         )
 
-        has_novel_junctions = not np.all(annotated_flags)
-        has_low_confidence_junction = np.any(confidence_scores < 0.3)
+        has_novel_junctions = not np.all(annotated_flags) if len(annotated_flags) > 0 else False
+        has_low_confidence_junction = np.any(confidence_scores < 0.3) if len(confidence_scores) > 0 else False
 
         # Statistical quality metrics
         # Prior dominance: estimate based on shrinkage of estimates

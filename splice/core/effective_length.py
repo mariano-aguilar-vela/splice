@@ -183,6 +183,9 @@ def compute_library_size_factors(
     col_sums = np.sum(count_matrix, axis=0).astype(float)
     median_sum = np.median(col_sums)
 
+    if median_sum == 0:
+        return np.ones(count_matrix.shape[1])
+
     # Avoid division by zero
     size_factors = np.where(col_sums > 0, col_sums / median_sum, 1.0)
 
@@ -190,6 +193,7 @@ def compute_library_size_factors(
     nonzero_factors = size_factors[size_factors > 0]
     if len(nonzero_factors) > 0:
         geo_mean = np.exp(np.mean(np.log(nonzero_factors)))
-        size_factors = size_factors / geo_mean
+        if geo_mean > 0:
+            size_factors = size_factors / geo_mean
 
     return size_factors

@@ -372,7 +372,8 @@ def export_event_gtf(
             if not all_coords:
                 continue
 
-            start = min(all_coords)
+            # Convert 0-based half-open to 1-based closed for GTF
+            start = min(all_coords) + 1
             end = max(all_coords)
             score = min(1000, int(-np.log10(diff_result.fdr + 1e-300)))
 

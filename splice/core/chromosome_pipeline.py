@@ -234,6 +234,34 @@ def process_chromosome(
     # Step 10: Event classification
     event_types = classify_all_events(modules)
 
+    # Build module metadata lookup for populating het results
+    module_meta = {}
+    for module, evt in zip(modules, event_types):
+        module_meta[module.module_id] = (module.gene_id, module.gene_name, evt)
+
+    # Populate gene_id, gene_name, event_type in HetResult objects
+    if het_results:
+        updated_het = []
+        for hr in het_results:
+            gene_id, gene_name, evt = module_meta.get(
+                hr.module_id, (hr.gene_id, hr.gene_name, hr.event_type)
+            )
+            updated_het.append(HetResult(
+                module_id=hr.module_id, gene_id=gene_id,
+                gene_name=gene_name, event_type=evt,
+                n_junctions=hr.n_junctions, sample_psi=hr.sample_psi,
+                group_labels=hr.group_labels,
+                ttest_pvalue=hr.ttest_pvalue,
+                mannwhitney_pvalue=hr.mannwhitney_pvalue,
+                within_group_variance=hr.within_group_variance,
+                between_group_variance=hr.between_group_variance,
+                heterogeneity_index=hr.heterogeneity_index,
+                bimodal_pvalue=hr.bimodal_pvalue,
+                n_outlier_samples=hr.n_outlier_samples,
+                fdr=hr.fdr,
+            ))
+        het_results = updated_het
+
     # Wire event types back into DiffResult objects (DiffResult is frozen)
     if diff_results and event_types:
         module_event_map = {}
