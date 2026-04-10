@@ -84,6 +84,8 @@ setup(
         "matplotlib>=3.7.0",
         "seaborn>=0.12.0",
         "numba>=0.58.0",
+        "openpyxl>=3.1.0",
+        "reportlab>=4.0",
     ],
     extras_require={
         "dev": [

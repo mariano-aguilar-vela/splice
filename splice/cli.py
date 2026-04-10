@@ -153,6 +153,16 @@ def main():
     help="Export significant junctions as BED file.",
 )
 @click.option(
+    "--export-xlsx",
+    is_flag=True,
+    help="Export publication-quality Excel workbook.",
+)
+@click.option(
+    "--export-pdf",
+    is_flag=True,
+    help="Export publication-quality PDF report with figures.",
+)
+@click.option(
     "--checkpoint-dir",
     default=None,
     type=click.Path(),
@@ -181,6 +191,8 @@ def run(
     export_leafcutter,
     export_rmats,
     export_bed,
+    export_xlsx,
+    export_pdf,
     checkpoint_dir,
 ):
     """Run the complete SPLICE differential splicing analysis pipeline.
@@ -445,7 +457,8 @@ def run(
         click.echo(f"  QC report generation failed: {e} (non-fatal, continuing)")
 
     # ── Step 10: Export formats ──────────────────────────────────────────────────
-    if export_leafcutter or export_rmats or export_bed:
+    has_exports = export_leafcutter or export_rmats or export_bed or export_xlsx or export_pdf
+    if has_exports:
         click.echo("[Step 10/10] Exporting results...")
         if export_leafcutter:
             lc_path = os.path.join(output_dir, "splice_leafcutter.tsv")
@@ -462,6 +475,39 @@ def run(
                 click.echo(f"  BED: {bed_path}")
             except Exception as e:
                 click.echo(f"  BED export failed: {e} (non-fatal)")
+        if export_xlsx:
+            try:
+                from splice.io.xlsx_export import export_xlsx_workbook
+                xlsx_path = os.path.join(output_dir, "splice_results.xlsx")
+                export_xlsx_workbook(
+                    diff_results, diagnostics, junction_evidence,
+                    confidence_scores, event_type_counts, xlsx_path,
+                )
+                click.echo(f"  Excel: {xlsx_path}")
+            except Exception as e:
+                click.echo(f"  Excel export failed: {e} (non-fatal)")
+        if export_pdf:
+            try:
+                from splice.io.pdf_report import generate_pdf_report
+                pdf_path = os.path.join(output_dir, "splice_report.pdf")
+                generate_pdf_report(
+                    diff_results, diagnostics, event_type_counts,
+                    pdf_path, output_dir,
+                    sample_info={
+                        "Samples": str(n_samples),
+                        "Group 1": ", ".join(names[i] for i in g1_indices),
+                        "Group 2": ", ".join(names[i] for i in g2_indices),
+                    },
+                    parameters={
+                        "Bootstraps": str(n_bootstraps),
+                        "Threads": str(threads),
+                        "Min cluster reads": str(min_cluster_reads),
+                    },
+                )
+                click.echo(f"  PDF: {pdf_path}")
+                click.echo(f"  Figures: {os.path.join(output_dir, 'figures/')}")
+            except Exception as e:
+                click.echo(f"  PDF report failed: {e} (non-fatal)")
     else:
         click.echo("[Step 10/10] No export formats requested")
 
