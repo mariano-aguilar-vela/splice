@@ -198,3 +198,112 @@ def extract_all_junctions(
     }
 
     return junction_evidence, cooccurrence_evidence
+
+
+def extract_junctions_for_chromosome(
+    chrom: str,
+    bam_paths: List[str],
+    sample_names: List[str],
+    known_junctions: Set[Junction],
+    genome_fasta_path: Optional[str] = None,
+    min_anchor: int = 6,
+    min_mapq: int = 0,
+) -> Tuple[Dict[Junction, JunctionEvidence], Dict[JunctionPair, CooccurrenceEvidence]]:
+    """Extract junctions from a single chromosome across all BAM files.
+
+    Same as extract_all_junctions() but restricted to one chromosome.
+    Uses pysam region-based fetch for fast access via BAM index.
+
+    Args:
+        chrom: Chromosome name (e.g., "chr1").
+        bam_paths: List of paths to BAM files (must be indexed).
+        sample_names: List of sample names (one per BAM).
+        known_junctions: Set of annotated junctions (filtered to this chrom internally).
+        genome_fasta_path: Optional path to genome FASTA for motif classification.
+        min_anchor: Minimum anchor length for valid junctions.
+        min_mapq: Minimum mapping quality to count a junction.
+
+    Returns:
+        Tuple of (junction_dict, cooccurrence_dict) for this chromosome only.
+    """
+    n_samples = len(bam_paths)
+
+    junction_stats: Dict[Junction, Dict] = {}
+    cooccurrence_counts: Dict[JunctionPair, np.ndarray] = {}
+
+    for sample_idx, (bam_path, sample_name) in enumerate(zip(bam_paths, sample_names)):
+        try:
+            extract_junction_stats_streaming(
+                bam_path=bam_path,
+                sample_idx=sample_idx,
+                junction_stats=junction_stats,
+                cooccurrence_counts=cooccurrence_counts,
+                n_samples=n_samples,
+                min_anchor=min_anchor,
+                min_mapq=min_mapq,
+                region=chrom,
+            )
+        except ValueError:
+            # Chromosome not present in this BAM file
+            pass
+
+    chrom_known_junctions = {j for j in known_junctions if j.chrom == chrom}
+
+    junction_evidence: Dict[Junction, JunctionEvidence] = {}
+
+    for junc, samples_stats in junction_stats.items():
+        sample_counts = np.zeros(n_samples, dtype=int)
+        sample_weighted_counts = np.zeros(n_samples, dtype=float)
+        sample_mapq_mean = np.zeros(n_samples, dtype=float)
+        sample_mapq_median = np.zeros(n_samples, dtype=float)
+        sample_nh_distribution = np.zeros(n_samples, dtype=float)
+        max_anchor_global = 0
+
+        for sample_idx_key, stats in samples_stats.items():
+            n = stats["n"]
+            sample_counts[sample_idx_key] = stats["counts"]
+            mean_nh = stats["nh_sum"] / n if n > 0 else 1.0
+            sample_weighted_counts[sample_idx_key] = stats["counts"] / mean_nh
+            sample_mapq_mean[sample_idx_key] = stats["mapq_sum"] / n if n > 0 else 0.0
+            sample_mapq_median[sample_idx_key] = sample_mapq_mean[sample_idx_key]
+            sample_nh_distribution[sample_idx_key] = mean_nh
+            max_anchor_global = max(max_anchor_global, stats["max_anchor"])
+
+        is_annotated = junc in chrom_known_junctions
+
+        motif_str = ""
+        motif_score_val = 0.0
+        if genome_fasta_path:
+            try:
+                donor_dinuc, acceptor_dinuc, motif_str = extract_motif_from_genome(
+                    genome_fasta_path, junc.chrom, junc.start, junc.end, junc.strand,
+                )
+                motif_score_val = score_motif(motif_str)
+            except Exception:
+                motif_str = ""
+                motif_score_val = 0.0
+
+        n_samples_detected = int(np.sum(sample_counts > 0))
+        cross_sample_recurrence = n_samples_detected / n_samples if n_samples > 0 else 0.0
+
+        junction_evidence[junc] = JunctionEvidence(
+            junction=junc,
+            sample_counts=sample_counts,
+            sample_weighted_counts=sample_weighted_counts,
+            sample_mapq_mean=sample_mapq_mean,
+            sample_mapq_median=sample_mapq_median,
+            sample_nh_distribution=sample_nh_distribution,
+            is_annotated=is_annotated,
+            motif=motif_str,
+            motif_score=motif_score_val,
+            max_anchor=max_anchor_global,
+            n_samples_detected=n_samples_detected,
+            cross_sample_recurrence=cross_sample_recurrence,
+        )
+
+    cooccurrence_evidence: Dict[JunctionPair, CooccurrenceEvidence] = {
+        pair: CooccurrenceEvidence(pair=pair, sample_counts=counts)
+        for pair, counts in cooccurrence_counts.items()
+    }
+
+    return junction_evidence, cooccurrence_evidence

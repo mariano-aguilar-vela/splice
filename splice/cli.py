@@ -225,18 +225,9 @@ def run(
 
     import numpy as np
 
-    from splice.core.clustering import cluster_junctions
     from splice.core.confidence_scorer import score_all_junctions
-    from splice.core.diagnostics import compute_diagnostics
-    from splice.core.diff import differential_splicing
-    from splice.core.diff_het import heterogeneous_splicing
-    from splice.core.event_classifier import classify_all_events
-    from splice.core.evidence import build_evidence_matrices
     from splice.core.gtf_parser import Gene, extract_known_junctions, parse_gtf
-    from splice.core.junction_extractor import extract_all_junctions
     from splice.core.nmd_classifier import classify_all_junctions_nmd
-    from splice.core.psi import quantify_psi
-    from splice.core.splicegraph import build_splicegraph
     from splice.io.format_export import (
         export_bed_format,
         export_leafcutter_format,
@@ -296,126 +287,99 @@ def run(
         save_checkpoint({"genes": genes, "known_junctions": known_junctions},
                         os.path.join(checkpoint_dir, "step01_gtf.pkl"))
 
-    # ── Step 2: Extract junctions from BAMs ────────────────────────────────────
-    click.echo("[Step  2/18] Extracting junctions from BAM files...")
-    t2 = time.time()
-    junction_evidence, cooccurrence = extract_all_junctions(
+    # ── Step 2: Detect chromosomes in BAM files ───────────────────────────────
+    click.echo("[Step  2/10] Detecting chromosomes in BAM files...")
+    import pysam as _pysam
+    with _pysam.AlignmentFile(bam_paths[0], "rb") as _bam:
+        bam_chromosomes = [ref for ref in _bam.references if ref.startswith("chr") and len(ref) <= 5]
+    gtf_chromosomes = set(g.chrom for g in genes.values())
+    active_chromosomes = sorted([c for c in bam_chromosomes if c in gtf_chromosomes])
+    click.echo(f"  Found {len(active_chromosomes)} chromosomes with genes: {', '.join(active_chromosomes[:5])}...")
+
+    # ── Step 3: Process chromosomes in parallel ──────────────────────────────
+    from splice.core.chromosome_pipeline import process_chromosome, merge_chromosome_results
+    from splice.utils.parallel import parallel_by_chromosome
+
+    n_workers = min(threads, len(active_chromosomes))
+    click.echo(f"[Step  3/10] Processing {len(active_chromosomes)} chromosomes ({n_workers} workers)...")
+    t3 = time.time()
+
+    detected_read_length = read_length if read_length else 150
+
+    chrom_results = parallel_by_chromosome(
+        process_chromosome,
+        active_chromosomes,
+        n_workers=n_workers,
         bam_paths=bam_paths,
         sample_names=names,
+        genes=genes,
         known_junctions=known_junctions,
+        group_labels=group_labels,
         genome_fasta_path=genome,
         min_anchor=min_anchor,
         min_mapq=min_mapq,
-    )
-    click.echo(f"  Found {len(junction_evidence)} junctions ({time.time()-t2:.1f}s)")
-
-    if checkpoint_dir:
-        save_checkpoint({"junction_evidence": junction_evidence, "cooccurrence": cooccurrence},
-                        os.path.join(checkpoint_dir, "step02_junctions.pkl"))
-
-    # ── Step 3-4: Score and annotate junctions ─────────────────────────────────
-    click.echo("[Step  3/18] Scoring junction confidence...")
-    confidence_scores = score_all_junctions(junction_evidence)
-    click.echo(f"  Scored {len(confidence_scores)} junctions")
-
-    # ── Step 5: Cluster junctions ──────────────────────────────────────────────
-    click.echo("[Step  5/18] Clustering junctions...")
-    t5 = time.time()
-    # Pre-filter: remove junctions with fewer than min_cluster_reads total reads
-    all_junctions = list(junction_evidence.keys())
-    filtered_junctions = [
-        junc for junc in all_junctions
-        if np.sum(junction_evidence[junc].sample_counts) >= min_cluster_reads
-    ]
-    click.echo(f"  Pre-filtered {len(all_junctions)} -> {len(filtered_junctions)} junctions (min {min_cluster_reads} total reads)")
-    clusters = cluster_junctions(filtered_junctions, max_intron_length=max_intron_length)
-    click.echo(f"  Formed {len(clusters)} clusters ({time.time()-t5:.1f}s)")
-
-    # ── Step 6: Build splicegraph and modules ──────────────────────────────────
-    click.echo("[Step  6/18] Building splicegraph...")
-    modules, junction_to_idx = build_splicegraph(
-        genes=genes,
-        junction_evidence=junction_evidence,
-        clusters=clusters,
-        known_junctions=known_junctions,
-    )
-    click.echo(f"  Built {len(modules)} splicing modules")
-
-    if checkpoint_dir:
-        save_checkpoint({"modules": modules, "junction_to_idx": junction_to_idx},
-                        os.path.join(checkpoint_dir, "step06_splicegraph.pkl"))
-
-    # ── Step 7: Build evidence matrices ────────────────────────────────────────
-    click.echo("[Step  7/18] Building evidence matrices...")
-    detected_read_length = read_length if read_length else 150  # Default to 150 if not specified
-    evidence_list = build_evidence_matrices(
-        modules=modules,
-        junction_evidence=junction_evidence,
-        junction_confidence=confidence_scores,
+        min_cluster_reads=min_cluster_reads,
+        max_intron_length=max_intron_length,
+        n_bootstraps=n_bootstraps,
         read_length=detected_read_length,
+        run_het=not no_het,
     )
-    click.echo(f"  Built evidence for {len(evidence_list)} modules")
 
-    # ── Step 8: Quantify PSI ───────────────────────────────────────────────────
-    click.echo(f"[Step  8/18] Quantifying PSI ({n_bootstraps} bootstraps)...")
-    t8 = time.time()
-    psi_list = quantify_psi(evidence_list, n_bootstraps=n_bootstraps, seed=42)
-    click.echo(f"  Quantified PSI for {len(psi_list)} modules ({time.time()-t8:.1f}s)")
+    # Print per-chromosome summary
+    total_junctions = 0
+    total_modules = 0
+    total_tested = 0
+    for cr in chrom_results:
+        total_junctions += cr.n_junctions_raw
+        total_modules += cr.n_modules
+        total_tested += cr.n_tested
+        if cr.n_junctions_raw > 0:
+            click.echo(
+                f"  {cr.chrom}: {cr.n_junctions_raw:,} junctions, "
+                f"{cr.n_junctions_filtered:,} filtered, "
+                f"{cr.n_clusters} clusters, "
+                f"{cr.n_modules} modules, "
+                f"{cr.n_tested} tested "
+                f"({cr.elapsed_seconds:.1f}s)"
+            )
 
-    if checkpoint_dir:
-        save_checkpoint({"evidence_list": evidence_list, "psi_list": psi_list},
-                        os.path.join(checkpoint_dir, "step08_psi.pkl"))
+    click.echo(f"  Total: {total_junctions:,} junctions, {total_modules} modules, {total_tested} tested ({time.time()-t3:.1f}s)")
 
-    # ── Step 9: Differential splicing ──────────────────────────────────────────
-    click.echo("[Step  9/18] Testing differential splicing (DM-GLM)...")
-    t9 = time.time()
-    diff_results = differential_splicing(
-        module_evidence_list=evidence_list,
-        module_psi_list=psi_list,
-        group_labels=group_labels,
-    )
+    # ── Step 4: Merge results and global FDR correction ──────────────────────
+    click.echo("[Step  4/10] Merging results and applying global FDR correction...")
+    (
+        junction_evidence,
+        cooccurrence,
+        modules,
+        evidence_list,
+        psi_list,
+        diff_results,
+        het_results,
+        event_types_list,
+        diagnostics,
+    ) = merge_chromosome_results(chrom_results)
+
     n_sig = sum(1 for dr in diff_results if dr.fdr < 0.05)
-    click.echo(f"  Tested {len(diff_results)} modules, {n_sig} significant (FDR < 0.05) ({time.time()-t9:.1f}s)")
+    click.echo(f"  {len(diff_results)} modules tested, {n_sig} significant (FDR < 0.05)")
 
-    # ── Step 10: Heterogeneity testing ─────────────────────────────────────────
-    if not no_het:
-        click.echo("[Step 10/18] Testing for heterogeneous effects...")
-        het_results = heterogeneous_splicing(psi_list, group_labels)
-        click.echo(f"  Tested {len(het_results)} modules")
-    else:
-        click.echo("[Step 10/18] Heterogeneity testing: SKIPPED")
-        het_results = []
-
-    # ── Step 11: Event classification ──────────────────────────────────────────
-    click.echo("[Step 11/18] Classifying event types...")
-    event_types_list = classify_all_events(modules)
     event_type_counts = {}
     for evt in event_types_list:
         event_type_counts[evt] = event_type_counts.get(evt, 0) + 1
     click.echo(f"  Event types: {event_type_counts}")
 
-    # ── Step 12: Diagnostics ───────────────────────────────────────────────────
-    click.echo("[Step 12/18] Computing diagnostics...")
-    tested_ids = {dr.module_id for dr in diff_results}
-    module_order = {dr.module_id: i for i, dr in enumerate(diff_results)}
-    tested_evidence = sorted(
-        [e for e in evidence_list if e.module.module_id in tested_ids],
-        key=lambda e: module_order.get(e.module.module_id, 999),
-    )
-    tested_psi = sorted(
-        [p for p in psi_list if p.module_id in tested_ids],
-        key=lambda p: module_order.get(p.module_id, 999),
-    )
-    diagnostics = compute_diagnostics(tested_evidence, tested_psi, diff_results)
-
     if checkpoint_dir:
-        save_checkpoint({"diff_results": diff_results, "diagnostics": diagnostics},
-                        os.path.join(checkpoint_dir, "step12_diff.pkl"))
+        save_checkpoint({
+            "diff_results": diff_results,
+            "diagnostics": diagnostics,
+            "junction_evidence_count": len(junction_evidence),
+            "modules_count": len(modules),
+        }, os.path.join(checkpoint_dir, "step04_merged.pkl"))
 
-    # ── Step 13: NMD classification ────────────────────────────────────────────
+    # ── Step 5: NMD classification ────────────────────────────────────────────
     nmd_classifications = {}
+    confidence_scores = score_all_junctions(junction_evidence)
     if genome and not no_nmd:
-        click.echo("[Step 13/18] Classifying NMD impact...")
+        click.echo("[Step  5/10] Classifying NMD impact...")
         # Use pysam.FastaFile for indexed access (no memory overhead)
         import pysam as _pysam
         genome_fasta = _pysam.FastaFile(genome)
@@ -425,16 +389,16 @@ def run(
         genome_fasta.close()
         click.echo("  NMD classification: genome loaded (per-junction NMD requires exon mapping)")
     else:
-        click.echo("[Step 13/18] NMD classification: SKIPPED")
+        click.echo("[Step  5/10] NMD classification: SKIPPED")
 
-    # ── Step 14: Write results ─────────────────────────────────────────────────
-    click.echo("[Step 14/18] Writing results...")
+    # ── Step 6: Write results ─────────────────────────────────────────────────
+    click.echo("[Step  6/10] Writing results...")
     results_path = os.path.join(output_dir, "splice_results.tsv")
     write_results_tsv(diff_results, diagnostics, results_path)
     click.echo(f"  Results: {results_path}")
 
-    # ── Step 15: Write junction details ────────────────────────────────────────
-    click.echo("[Step 15/18] Writing junction details...")
+    # ── Step 7: Write junction details ──────────────────────────────────────────
+    click.echo("[Step  7/10] Writing junction details...")
     junc_evidence_dict = {}
     for junc, ev in junction_evidence.items():
         junc_id = junc.to_string() if hasattr(junc, 'to_string') else f"{junc.chrom}:{junc.start}-{junc.end}:{junc.strand}"
@@ -457,14 +421,14 @@ def run(
     write_junction_details_tsv(junc_evidence_dict, junction_conf_dict, nmd_classifications, junction_details_path)
     click.echo(f"  Junction details: {junction_details_path}")
 
-    # ── Step 16: Write summary ─────────────────────────────────────────────────
-    click.echo("[Step 16/18] Writing summary...")
+    # ── Step 8: Write summary ───────────────────────────────────────────────────
+    click.echo("[Step  8/10] Writing summary...")
     summary_path = os.path.join(output_dir, "splice_summary.tsv")
     write_summary_tsv(diff_results, diagnostics, event_type_counts, summary_path)
     click.echo(f"  Summary: {summary_path}")
 
-    # ── Step 17: QC report ─────────────────────────────────────────────────────
-    click.echo("[Step 17/18] Generating QC report...")
+    # ── Step 9: QC report ───────────────────────────────────────────────────────
+    click.echo("[Step  9/10] Generating QC report...")
     qc_path = os.path.join(output_dir, "splice_qc_report.html")
     try:
         generate_qc_report(
@@ -480,9 +444,9 @@ def run(
     except Exception as e:
         click.echo(f"  QC report generation failed: {e} (non-fatal, continuing)")
 
-    # ── Step 18: Export formats ────────────────────────────────────────────────
+    # ── Step 10: Export formats ──────────────────────────────────────────────────
     if export_leafcutter or export_rmats or export_bed:
-        click.echo("[Step 18/18] Exporting results...")
+        click.echo("[Step 10/10] Exporting results...")
         if export_leafcutter:
             lc_path = os.path.join(output_dir, "splice_leafcutter.tsv")
             export_leafcutter_format(diff_results, lc_path, fdr_threshold=0.05)
@@ -499,7 +463,7 @@ def run(
             except Exception as e:
                 click.echo(f"  BED export failed: {e} (non-fatal)")
     else:
-        click.echo("[Step 18/18] No export formats requested")
+        click.echo("[Step 10/10] No export formats requested")
 
     # ── Done ───────────────────────────────────────────────────────────────────
     elapsed = time.time() - t_start

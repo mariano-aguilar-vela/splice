@@ -369,6 +369,7 @@ def extract_junction_stats_streaming(
     n_samples: int,
     min_anchor: int = 6,
     min_mapq: int = 0,
+    region: Optional[str] = None,
 ) -> Dict:
     """Extract junction statistics from a BAM file in streaming mode.
 
@@ -389,6 +390,8 @@ def extract_junction_stats_streaming(
         n_samples: Total number of samples (for initializing arrays).
         min_anchor: Minimum anchor length for valid junctions.
         min_mapq: Minimum mapping quality to include read.
+        region: Optional region string (e.g., "chr1") for chromosome-level fetch.
+            When None, reads the entire BAM file.
 
     Returns:
         Dict with BAM-level statistics (total_reads, mapped_reads, etc.).
@@ -401,7 +404,7 @@ def extract_junction_stats_streaming(
     mapq_count = 0
 
     with pysam.AlignmentFile(bam_path, "rb") as bam:
-        for read in bam.fetch():
+        for read in bam.fetch(region=region):
             total_reads += 1
 
             if read.is_unmapped:
