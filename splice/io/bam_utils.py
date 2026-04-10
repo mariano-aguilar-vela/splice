@@ -460,17 +460,42 @@ def extract_junction_stats_streaming(
 
     Returns:
         Dict with BAM-level statistics (total_reads, mapped_reads, etc.).
-    """
-    # Use Rust-accelerated reader if available
-    if RUST_AVAILABLE:
-        try:
-            return _rust_extract_and_aggregate(
-                bam_path, sample_idx, junction_stats, cooccurrence_counts,
-                n_samples, min_anchor, min_mapq, region,
-            )
-        except Exception:
-            pass  # Fall through to Python implementation
 
+    Raises:
+        ImportError: If the Rust BAM reader extension is not available.
+            Production runs require the Rust extension for performance.
+            Run 'splice build-rust' to install it.
+    """
+    if not RUST_AVAILABLE:
+        raise ImportError(
+            "Rust BAM reader required for production use. "
+            "Run 'splice build-rust' to install it."
+        )
+    return _rust_extract_and_aggregate(
+        bam_path, sample_idx, junction_stats, cooccurrence_counts,
+        n_samples, min_anchor, min_mapq, region,
+    )
+
+
+def _python_extract_junction_stats_streaming(
+    bam_path: str,
+    sample_idx: int,
+    junction_stats: Dict,
+    cooccurrence_counts: Dict,
+    n_samples: int,
+    min_anchor: int = 6,
+    min_mapq: int = 0,
+    region: Optional[str] = None,
+) -> Dict:
+    """Pure Python implementation of extract_junction_stats_streaming.
+
+    Kept for testing and as a reference implementation. Production runs
+    should use the Rust-accelerated extract_junction_stats_streaming()
+    which is ~10-50x faster.
+
+    Arguments and return value are identical to
+    extract_junction_stats_streaming().
+    """
     total_reads = 0
     mapped_reads = 0
     junction_reads = 0

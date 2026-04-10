@@ -2,7 +2,8 @@
 Tests for the Rust BAM reader.
 
 These tests verify that the Rust extension produces identical results
-to the Python implementation. They are skipped if Rust is not compiled.
+to the Python reference implementation. They are skipped if Rust is
+not compiled.
 """
 
 import numpy as np
@@ -27,27 +28,25 @@ class TestRustPythonEquivalence:
 
     def test_identical_junction_counts(self, all_bam_paths, sample_names):
         """Rust and Python should find the same junctions with same counts."""
-        import splice.io.bam_utils as bam_mod
-        from splice.io.bam_utils import _rust_extract_and_aggregate
+        from splice.io.bam_utils import (
+            _python_extract_junction_stats_streaming,
+            _rust_extract_and_aggregate,
+        )
 
-        # Run Python version (force Python path)
-        saved = bam_mod.RUST_AVAILABLE
-        bam_mod.RUST_AVAILABLE = False
+        # Python reference implementation
         py_js, py_co = {}, {}
-        bam_mod.extract_junction_stats_streaming(
+        _python_extract_junction_stats_streaming(
             all_bam_paths[0], 0, py_js, py_co,
             n_samples=len(all_bam_paths), min_anchor=6, min_mapq=0,
         )
-        bam_mod.RUST_AVAILABLE = saved
 
-        # Run Rust version
+        # Rust implementation
         rust_js, rust_co = {}, {}
         _rust_extract_and_aggregate(
             all_bam_paths[0], 0, rust_js, rust_co,
             n_samples=len(all_bam_paths), min_anchor=6, min_mapq=0,
         )
 
-        # Compare junction counts
         assert set(py_js.keys()) == set(rust_js.keys()), \
             "Rust and Python found different junctions"
 
@@ -59,17 +58,16 @@ class TestRustPythonEquivalence:
 
     def test_identical_statistics(self, all_bam_paths, sample_names):
         """Rust and Python should report same BAM-level statistics."""
-        import splice.io.bam_utils as bam_mod
-        from splice.io.bam_utils import _rust_extract_and_aggregate
+        from splice.io.bam_utils import (
+            _python_extract_junction_stats_streaming,
+            _rust_extract_and_aggregate,
+        )
 
-        saved = bam_mod.RUST_AVAILABLE
-        bam_mod.RUST_AVAILABLE = False
         py_js, py_co = {}, {}
-        py_stats = bam_mod.extract_junction_stats_streaming(
+        py_stats = _python_extract_junction_stats_streaming(
             all_bam_paths[0], 0, py_js, py_co,
             n_samples=len(all_bam_paths),
         )
-        bam_mod.RUST_AVAILABLE = saved
 
         rust_js, rust_co = {}, {}
         rust_stats = _rust_extract_and_aggregate(
@@ -83,17 +81,16 @@ class TestRustPythonEquivalence:
 
     def test_identical_cooccurrence(self, all_bam_paths, sample_names):
         """Rust and Python should find same co-occurrence pairs."""
-        import splice.io.bam_utils as bam_mod
-        from splice.io.bam_utils import _rust_extract_and_aggregate
+        from splice.io.bam_utils import (
+            _python_extract_junction_stats_streaming,
+            _rust_extract_and_aggregate,
+        )
 
-        saved = bam_mod.RUST_AVAILABLE
-        bam_mod.RUST_AVAILABLE = False
         py_js, py_co = {}, {}
-        bam_mod.extract_junction_stats_streaming(
+        _python_extract_junction_stats_streaming(
             all_bam_paths[0], 0, py_js, py_co,
             n_samples=len(all_bam_paths),
         )
-        bam_mod.RUST_AVAILABLE = saved
 
         rust_js, rust_co = {}, {}
         _rust_extract_and_aggregate(
@@ -134,20 +131,28 @@ class TestRustPythonEquivalence:
             pass  # Expected for invalid region
 
 
-class TestRustFallback:
-    """Test that the Rust fallback mechanism works."""
+class TestRustRequiredPath:
+    """Test that extract_junction_stats_streaming requires Rust."""
 
     def test_rust_availability_check(self):
         """RUST_AVAILABLE should be a boolean."""
         from splice.io.bam_utils import RUST_AVAILABLE as bam_rust
         assert isinstance(bam_rust, bool)
 
-    def test_python_path_always_works(self):
-        """The Python extraction path should always work regardless of Rust."""
+    def test_python_reference_is_accessible(self):
+        """The Python reference implementation should be importable."""
+        from splice.io.bam_utils import _python_extract_junction_stats_streaming
+        assert callable(_python_extract_junction_stats_streaming)
+
+    def test_streaming_raises_without_rust(self):
+        """extract_junction_stats_streaming should raise if Rust is unavailable."""
         import splice.io.bam_utils as bam_module
-        original = getattr(bam_module, 'RUST_AVAILABLE', False)
+        original = bam_module.RUST_AVAILABLE
         try:
             bam_module.RUST_AVAILABLE = False
-            assert hasattr(bam_module, 'extract_junction_stats_streaming')
+            with pytest.raises(ImportError, match="Rust BAM reader required"):
+                bam_module.extract_junction_stats_streaming(
+                    "/nonexistent.bam", 0, {}, {}, n_samples=1,
+                )
         finally:
             bam_module.RUST_AVAILABLE = original
