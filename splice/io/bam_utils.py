@@ -23,6 +23,12 @@ else:
     except ImportError:
         pysam = None  # type: ignore[assignment]
 
+# Try to import Rust-accelerated BAM reader
+try:
+    from splice._rust_bam import extract_junction_stats_rust, RUST_AVAILABLE
+except ImportError:
+    RUST_AVAILABLE = False
+
 
 @dataclass(frozen=True)
 class ReadEvidence:
@@ -361,6 +367,65 @@ def count_exon_body_reads(
     return raw_count, weighted_count
 
 
+def _rust_extract_and_aggregate(
+    bam_path: str,
+    sample_idx: int,
+    junction_stats: Dict,
+    cooccurrence_counts: Dict,
+    n_samples: int,
+    min_anchor: int = 6,
+    min_mapq: int = 0,
+    region: Optional[str] = None,
+) -> Dict:
+    """Call the Rust BAM reader and aggregate results into Python dicts.
+
+    The Rust function returns raw per-BAM results. This wrapper integrates
+    them into the shared junction_stats and cooccurrence_counts dictionaries
+    in the same format as the Python streaming function.
+    """
+    from splice._rust_bam import extract_junction_stats_rust
+
+    rust_result = extract_junction_stats_rust(
+        bam_path,
+        region=region,
+        min_anchor=min_anchor,
+        min_mapq=min_mapq,
+    )
+
+    for junc_tuple, stats in rust_result["junction_stats"].items():
+        chrom, start, end, strand = junc_tuple
+        junc = Junction(chrom=chrom, start=int(start), end=int(end), strand=strand)
+
+        if junc not in junction_stats:
+            junction_stats[junc] = {}
+        junction_stats[junc][sample_idx] = {
+            "counts": int(stats["counts"]),
+            "mapq_sum": float(stats["mapq_sum"]),
+            "mapq_sq_sum": float(stats["mapq_sq_sum"]),
+            "nh_sum": float(stats["nh_sum"]),
+            "n": int(stats["n"]),
+            "max_anchor": int(stats["max_anchor"]),
+        }
+
+    for pair_tuple, count in rust_result["cooccurrence_counts"].items():
+        (chrom1, s1, e1, strand1), (chrom2, s2, e2, strand2) = pair_tuple
+        j1 = Junction(chrom=chrom1, start=int(s1), end=int(e1), strand=strand1)
+        j2 = Junction(chrom=chrom2, start=int(s2), end=int(e2), strand=strand2)
+        pair = JunctionPair(j1, j2)
+        if pair not in cooccurrence_counts:
+            cooccurrence_counts[pair] = np.zeros(n_samples, dtype=int)
+        cooccurrence_counts[pair][sample_idx] += int(count)
+
+    mapq_count = rust_result["mapq_count"]
+    return {
+        "total_reads": int(rust_result["total_reads"]),
+        "mapped_reads": int(rust_result["mapped_reads"]),
+        "junction_reads": int(rust_result["junction_reads"]),
+        "multi_mapped_reads": int(rust_result["multi_mapped_reads"]),
+        "mean_mapq": float(rust_result["mapq_sum"]) / mapq_count if mapq_count > 0 else 0.0,
+    }
+
+
 def extract_junction_stats_streaming(
     bam_path: str,
     sample_idx: int,
@@ -396,6 +461,16 @@ def extract_junction_stats_streaming(
     Returns:
         Dict with BAM-level statistics (total_reads, mapped_reads, etc.).
     """
+    # Use Rust-accelerated reader if available
+    if RUST_AVAILABLE:
+        try:
+            return _rust_extract_and_aggregate(
+                bam_path, sample_idx, junction_stats, cooccurrence_counts,
+                n_samples, min_anchor, min_mapq, region,
+            )
+        except Exception:
+            pass  # Fall through to Python implementation
+
     total_reads = 0
     mapped_reads = 0
     junction_reads = 0

@@ -62,6 +62,9 @@ docs = [
     "sphinx>=5.0",
     "sphinx-rtd-theme>=1.0",
 ]
+rust = [
+    "maturin>=1.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/mariano-aguilar-vela/splice"
@@ -119,3 +122,7 @@ markers = [
     "benchmark: marks tests as benchmark tests",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "splice_rust"
