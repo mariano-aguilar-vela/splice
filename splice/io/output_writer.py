@@ -42,8 +42,8 @@ def write_results_tsv(
             "event_type",
             "n_junctions",
             "max_abs_delta_psi",
-            "psi_group1_mean",
-            "psi_group2_mean",
+            "psi_group1_max_effect_junction",
+            "psi_group2_max_effect_junction",
             "log_likelihood_null",
             "log_likelihood_full",
             "degrees_of_freedom",
@@ -66,8 +66,16 @@ def write_results_tsv(
 
         # Write rows
         for diff_result, diagnostic in zip(diff_results, diagnostics):
-            psi_group1_mean = np.mean(diff_result.psi_group1)
-            psi_group2_mean = np.mean(diff_result.psi_group2)
+            # PSI values within a module sum to 1 across junctions, so taking
+            # the mean is meaningless (always = 1/n_junctions). Instead, report
+            # the PSI of the junction with the largest absolute delta-PSI.
+            if len(diff_result.delta_psi) > 0:
+                max_idx = int(np.argmax(np.abs(diff_result.delta_psi)))
+                psi_group1_mean = float(diff_result.psi_group1[max_idx])
+                psi_group2_mean = float(diff_result.psi_group2[max_idx])
+            else:
+                psi_group1_mean = 0.0
+                psi_group2_mean = 0.0
 
             row = [
                 diff_result.module_id,

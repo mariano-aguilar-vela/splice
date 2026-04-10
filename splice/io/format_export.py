@@ -91,6 +91,17 @@ def export_rmats_format(
 
             # Compute inclusion/skipping counts from PSI and total junctions
             n_juncs = diff_result.n_junctions
+            # PSI of the junction with largest absolute delta-PSI (the
+            # event-defining junction). Mean of psi_group is meaningless
+            # since PSI sums to 1 across junctions in a module.
+            if len(diff_result.delta_psi) > 0:
+                max_idx = int(np.argmax(np.abs(diff_result.delta_psi)))
+                psi1_top = float(diff_result.psi_group1[max_idx])
+                psi2_top = float(diff_result.psi_group2[max_idx])
+            else:
+                psi1_top = 0.0
+                psi2_top = 0.0
+
             inc_count_1 = int(np.sum(diff_result.psi_group1[:n_juncs-1]) * 1000) if n_juncs > 1 else 0
             skip_count_1 = int(diff_result.psi_group1[-1] * 1000) if n_juncs > 0 else 0
             inc_count_2 = int(np.sum(diff_result.psi_group2[:n_juncs-1]) * 1000) if n_juncs > 1 else 0
@@ -116,8 +127,8 @@ def export_rmats_format(
                 str(max(1, event_end - event_start)),
                 f"{diff_result.p_value:.6e}",
                 f"{diff_result.fdr:.6e}",
-                f"{np.mean(diff_result.psi_group1):.4f}",
-                f"{np.mean(diff_result.psi_group2):.4f}",
+                f"{psi1_top:.4f}",
+                f"{psi2_top:.4f}",
                 f"{diff_result.max_abs_delta_psi:.4f}",
             ]
             f.write("\t".join(row) + "\n")
@@ -184,6 +195,15 @@ def export_leafcutter_format(
             lc_start = min(lc_starts) if lc_starts else 0
             lc_end = max(lc_ends) if lc_ends else 0
 
+            # PSI of the junction with largest absolute delta-PSI
+            if len(diff_result.delta_psi) > 0:
+                lc_max_idx = int(np.argmax(np.abs(diff_result.delta_psi)))
+                lc_psi1 = float(diff_result.psi_group1[lc_max_idx])
+                lc_psi2 = float(diff_result.psi_group2[lc_max_idx])
+            else:
+                lc_psi1 = 0.0
+                lc_psi2 = 0.0
+
             row = [
                 f"cluster_{i:06d}",
                 diff_result.gene_id,
@@ -192,8 +212,8 @@ def export_leafcutter_format(
                 str(lc_end),
                 str(diff_result.n_junctions),
                 exon_coords,
-                f"{np.mean(diff_result.psi_group1):.4f}",
-                f"{np.mean(diff_result.psi_group2):.4f}",
+                f"{lc_psi1:.4f}",
+                f"{lc_psi2:.4f}",
                 f"{diff_result.max_abs_delta_psi:.4f}",
                 f"{log_pval:.4f}",
                 f"{diff_result.fdr:.6e}",
