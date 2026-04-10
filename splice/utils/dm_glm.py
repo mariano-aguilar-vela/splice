@@ -317,7 +317,7 @@ def dm_lrt(
     if test_stat < 0:
         return 1.0
 
-    p_value = 1 - chi2.cdf(test_stat, df)
+    p_value = chi2.sf(test_stat, df)
     return p_value
 
 

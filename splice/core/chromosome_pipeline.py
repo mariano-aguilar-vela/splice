@@ -234,6 +234,41 @@ def process_chromosome(
     # Step 10: Event classification
     event_types = classify_all_events(modules)
 
+    # Wire event types back into DiffResult objects (DiffResult is frozen)
+    if diff_results and event_types:
+        module_event_map = {}
+        for module, evt in zip(modules, event_types):
+            module_event_map[module.module_id] = evt
+
+        updated_diff = []
+        for dr in diff_results:
+            evt = module_event_map.get(dr.module_id, dr.event_type)
+            updated_diff.append(DiffResult(
+                module_id=dr.module_id, gene_id=dr.gene_id,
+                gene_name=dr.gene_name, chrom=dr.chrom, strand=dr.strand,
+                event_type=evt, n_junctions=dr.n_junctions,
+                junction_coords=dr.junction_coords,
+                junction_confidence=dr.junction_confidence,
+                is_annotated=dr.is_annotated,
+                psi_group1=dr.psi_group1, psi_group2=dr.psi_group2,
+                delta_psi=dr.delta_psi,
+                max_abs_delta_psi=dr.max_abs_delta_psi,
+                delta_psi_ci_low=dr.delta_psi_ci_low,
+                delta_psi_ci_high=dr.delta_psi_ci_high,
+                log_likelihood_null=dr.log_likelihood_null,
+                log_likelihood_full=dr.log_likelihood_full,
+                degrees_of_freedom=dr.degrees_of_freedom,
+                p_value=dr.p_value, fdr=dr.fdr,
+                null_converged=dr.null_converged,
+                full_converged=dr.full_converged,
+                null_refit_used=dr.null_refit_used,
+                null_iterations=dr.null_iterations,
+                full_iterations=dr.full_iterations,
+                null_gradient_norm=dr.null_gradient_norm,
+                full_gradient_norm=dr.full_gradient_norm,
+            ))
+        diff_results = updated_diff
+
     # Step 11: Diagnostics
     tested_ids = {dr.module_id for dr in diff_results}
     module_order = {dr.module_id: i for i, dr in enumerate(diff_results)}

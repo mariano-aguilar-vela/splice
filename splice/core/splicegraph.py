@@ -168,6 +168,15 @@ def build_splicegraph(
 
                 # Create modules for merged clusters
                 for merged_cluster in merged:
+                    # Deduplicate junctions (can occur when merging clusters)
+                    seen = set()
+                    unique_junctions = []
+                    for j in merged_cluster:
+                        if j not in seen:
+                            seen.add(j)
+                            unique_junctions.append(j)
+                    merged_cluster = unique_junctions
+
                     module_id = (
                         f"{gene_id}:{chrom}:{strand}:{module_counter}"
                     )
