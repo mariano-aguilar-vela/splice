@@ -80,6 +80,7 @@ splice = "splice.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["splice*"]
+exclude = ["benchmark*"]
 
 [tool.black]
 line-length = 100

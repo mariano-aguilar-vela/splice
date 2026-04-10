@@ -68,7 +68,7 @@ setup(
         "transcriptomics",
         "splicing analysis",
     ],
-    packages=find_packages(exclude=["tests", "tests.*", "docs", "examples"]),
+    packages=find_packages(exclude=["tests", "tests.*", "docs", "examples", "benchmark", "benchmark.*"]),
     install_requires=[
         "pysam>=0.22.0",
         "numpy>=1.24.0",
